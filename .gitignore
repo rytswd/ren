@@ -4,3 +4,7 @@
 # nix
 result
 result-*
+
+# zig
+.zig-cache/
+zig-out/
