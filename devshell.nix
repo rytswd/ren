@@ -1,7 +1,9 @@
-{ pkgs }:
+{ pkgs, inputs }:
 pkgs.mkShell {
   # Add build dependencies
-  packages = [ ];
+  packages = [
+    inputs.zig-overlay.packages.${pkgs.system}.master
+  ];
 
   # Add environment variables
   env = { };
