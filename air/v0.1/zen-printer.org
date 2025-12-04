@@ -1,0 +1,406 @@
+#+title: Zen Printer
+#+state: draft
+#+FILETAGS: :zen:feature:
+
+* Summary
+Implement the epitome of sophisticated terminal output through extreme minimalism and generous spacing. Zen printer focuses on restraint, breathing room, and subtle visual elements that guide rather than contain.
+
+* Motivation
+The highest form of sophistication is often found in what is left out, not what is included. While box printer provides structure through borders, zen printer achieves elegance through space, subtlety, and restraint.
+
+For a library named after 洗練 (sophistication), zen printer embodies the principle of "less is more" - using generous whitespace, subtle separators, and minimal visual elements to create refined, breathable layouts.
+
+** Goals
+- Generous use of vertical and horizontal spacing
+- Extremely subtle visual elements (thin lines, dots, minimal marks)
+- Crop mark style corners (minimal corner indicators)
+- Subtle horizontal separators
+- Content-focused design where space is the primary element
+- Centring with large margins
+- Breathing room as a design principle
+- User-customisable spacing and subtlety levels
+
+** Non-Goals
+- Heavy borders or containers
+- Dense layouts with minimal spacing
+- Decorative elements that draw attention
+- Complex visual structures
+
+* Proposal
+
+** Minimal Separator Style
+Subtle horizontal line with generous spacing:
+
+#+begin_example
+
+
+  Section Title
+
+  ─────────────────────────────────────
+
+
+  Content flows naturally with
+  plenty of breathing room
+
+  More content here
+
+
+#+end_example
+
+Characteristics:
+- Single thin line separator
+- Multiple blank lines above and below
+- No vertical containment
+- Clean, unobtrusive
+- Lets content breathe
+
+** Crop Mark Style
+Minimal corner indicators, maximum space:
+
+#+begin_example
+
+
+  ┌                                        ┐
+
+
+        Centred Content Title
+
+
+        Content with generous margins
+        on all sides
+
+        More content here
+
+
+  └                                        ┘
+
+
+#+end_example
+
+Characteristics:
+- Only small corner marks visible
+- Large internal spacing
+- Content centred within space
+- Corners define boundary without containing
+- Extremely minimal visual elements
+
+** Dotted Separator Style
+Whisper-quiet section separation with optional subtle rainbow:
+
+#+begin_example
+
+
+  Section One
+
+  · · · · · · · · · · · · · · · · · · ·
+
+
+  Content in first section
+  flows naturally
+
+
+  · · · · · · · · · · · · · · · · · · ·
+
+
+  Section Two
+
+
+#+end_example
+
+With subtle pastel rainbow (truecolor):
+- Each dot can have a softly different pastel hue
+- Very subtle gradient across the separator
+- Whisper-quiet colour variation
+- Creates gentle visual interest without distraction
+
+Characteristics:
+- Dotted line creates subtle visual break
+- Dots spaced for lightness
+- Optional pastel rainbow gradient (truecolor)
+- Multiple blank lines for breathing room
+- Non-intrusive separation
+
+** Side Mark Style
+Minimal left indicator with generous indentation:
+
+#+begin_example
+
+
+  ·  Section Title
+
+
+     Content indented generously
+     from the side mark
+
+     More content flows naturally
+     with consistent spacing
+
+
+  ·  Another Section
+
+
+#+end_example
+
+Characteristics:
+- Single dot or thin mark on left
+- Generous indentation
+- Vertical spacing between sections
+- Minimal visual weight
+- Clean alignment
+
+** Centre Block Style
+Content island with space all around:
+
+#+begin_example
+
+
+
+
+                Configuration
+
+
+                version:  0.1.0
+                author:   rytswd
+                licence:  MIT
+
+
+
+
+#+end_example
+
+Characteristics:
+- Content centred horizontally
+- Large vertical margins
+- No borders or lines
+- Pure spacing defines the area
+- Maximum minimalism
+
+* Design Details
+
+** Spacing Configuration
+All spacing fully customisable:
+- **Vertical margins**: Lines above/below sections (default: 2-3 blank lines)
+- **Horizontal margins**: Space from edges (default: generous)
+- **Line spacing**: Space between content lines (default: single, optional double)
+- **Section spacing**: Space between logical sections (default: 3-4 blank lines)
+
+** Subtle Visual Elements
+Minimal options for visual guidance:
+- **Thin line**: `─` single horizontal line
+- **Dotted**: `· · ·` spaced dots
+- **Dotted rainbow**: Subtle pastel gradient across dots (truecolor)
+- **Crop marks**: `┌ ┐ └ ┘` corners only
+- **Side mark**: Single `·` or `│` character
+- **None**: Pure spacing only
+
+** Alignment Options
+- **Left**: Content aligned left with left margin (default)
+- **Centre**: Content centred horizontally
+- **Right**: Content aligned right with right margin
+
+** Width Behaviour
+Unlike box printer, zen printer uses maximum restraint:
+- **Default**: Content width with generous margins
+- **Centred**: Auto-calculated margins to centre content block
+- **Max width**: Optional maximum before wrapping
+- **No filling**: Never fills to terminal width unless specified
+
+** Colour Support
+Extremely subtle colour use:
+- Visual elements in very dim grey (barely visible) by default
+- Option to make separators nearly invisible
+- Dotted separators can use subtle pastel rainbow gradient (truecolor)
+  - Very soft pastel hues
+  - Gentle colour transitions
+  - Whisper-quiet visual interest
+- Content in normal colour
+- Emphasis through spacing, not bold colour
+
+* Examples
+
+** Example 1: Minimal Document Header
+#+begin_example
+
+
+
+
+                  ren (練)
+
+          Terminal Rendering Library
+
+
+
+
+#+end_example
+
+** Example 2: Subtle Section Separation
+#+begin_example
+
+
+  Introduction
+
+  ─────────────────────────────────────
+
+
+  ren is a sophisticated terminal rendering
+  library for Zig, embodying the principle
+  of 洗練 (senren) - refinement.
+
+
+  ─────────────────────────────────────
+
+
+  Features
+
+
+  Simple, small, sophisticated design
+  Zero external dependencies
+  Full user control over aesthetics
+
+
+#+end_example
+
+** Example 3: Crop Mark Content Block
+#+begin_example
+
+
+  ┌                                                          ┐
+
+
+                        Project Status
+
+
+                    Build:    ✓ Passing
+                    Tests:    ✓ All passing
+                    Version:  0.1.0
+
+
+  └                                                          ┘
+
+
+#+end_example
+
+** Example 4: Side Mark Sections
+#+begin_example
+
+
+  ·  Configuration
+
+
+     main-directory      ./air/
+     context-directory   ./air/context/
+     default-width       60
+
+
+  ·  Metadata
+
+
+     version   0.1.0
+     author    rytswd
+
+
+#+end_example
+
+** Example 5: Dotted Separation with Centre Alignment
+#+begin_example
+
+
+                   Build Output
+
+
+  · · · · · · · · · · · · · · · · · · · · · ·
+
+
+              Compiling src/main.zig
+              Compiling src/box.zig
+              Compiling src/zen.zig
+
+
+  · · · · · · · · · · · · · · · · · · · · · ·
+
+
+                ✓ Build Successful
+
+
+#+end_example
+
+Note: With subtle pastel rainbow enabled (truecolor), each dot would have a softly different pastel hue creating a gentle gradient - imagine very soft pink → peach → mint → sky blue → lavender tones.
+
+** Example 6: Pure Spacing (No Visual Elements)
+#+begin_example
+
+
+
+
+        Welcome to ren
+
+
+
+
+        A sophisticated terminal
+        rendering library for Zig
+
+
+
+
+        Simple
+
+        Small
+
+        Sophisticated
+
+
+
+
+#+end_example
+
+* Drawbacks
+- Very minimal design may not provide enough structure for some use cases
+- Generous spacing uses more vertical screen space
+- Subtlety may be lost in busy terminal outputs
+- May feel too sparse for information-dense displays
+- Requires user restraint to maintain aesthetic
+
+* Alternatives
+
+** Medium Spacing
+Less extreme spacing, more conventional:
+- 1 blank line instead of 2-3
+- Standard margins
+- More content per screen
+- Less breathing room
+
+** Visible Separators
+Use more visible separators instead of subtle:
+- Thicker lines
+- More prominent marks
+- Easier to scan quickly
+- Loses zen aesthetic
+
+** No Zen Printer
+Users can create minimal layouts using box printer with minimal settings:
+- More code for users
+- Less cohesive aesthetic
+- Misses the point of zen design
+
+** Indent-Only
+Just use indentation without any visual elements:
+- Simpler implementation
+- Loses subtle guidance
+- No visual anchors
+
+* Infrastructure Needed
+All implementable with Zig stdlib - no external dependencies:
+- Unicode width calculation for alignment
+- Terminal width detection for centring
+- Colour code utilities (very subtle greys)
+- Text alignment and padding utilities
+
+* History
+- 2025-12-04: Initial draft created
+
+* References
+- Zen Design Principles
+- Minimalist Typography
+- Japanese Ma (間) - Negative Space: https://en.wikipedia.org/wiki/Ma_(negative_space)
+- Wabi-sabi Aesthetics: https://en.wikipedia.org/wiki/Wabi-sabi

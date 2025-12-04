@@ -1,0 +1,459 @@
+#+title: Box Printer
+#+state: draft
+#+FILETAGS: :box:feature:
+
+* Summary
+Implement sophisticated box drawing utilities for terminal output with multiple styles: left-bordered boxes for vertical flow, full rectangular boxes for emphasis, and various border character sets. Support content alignment within boxes and box positioning on screen.
+
+* Motivation
+Box drawing is a fundamental element of refined terminal interfaces. Modern CLI tools use boxes to create visual hierarchy, group related information, and draw attention to important content.
+
+For a library named after 洗練 (sophistication), box rendering should be elegant and flexible - providing simple defaults while allowing full customisation of borders, alignment, padding, and positioning.
+
+** Goals
+- Left-bordered style (vertical line with corners, no full box)
+- Full box style (complete rectangular container)
+- Multiple border character sets (single, double, rounded, heavy, ASCII, block)
+- Dropshadow effect (southeast) for elevated appearance
+- Content alignment within box (left, centre, right)
+- Box positioning on screen (left, centre, right)
+- Configurable padding and spacing
+- Configurable box width
+- User-customisable border characters and colours
+
+** Non-Goals
+- Dynamic box resizing based on terminal events
+- Nested box layouts (users can compose these manually)
+- Box scrolling or overflow handling
+- Interactive box selection
+
+* Proposal
+
+** Left-Bordered Style
+Vertical line with corners, content flows naturally without right border:
+
+#+begin_example
+┌─ Section Title
+│
+│  Content line one
+│  Content line two
+│  More content here
+│
+└
+#+end_example
+
+Use cases:
+- Command output sections
+- Hierarchical information display
+- Progress indicators with grouped output
+- Log messages with visual grouping
+
+Characteristics:
+- Top corner with optional title
+- Vertical line on left
+- Bottom corner to close section
+- No right border or bottom line
+- Minimal width impact
+- Clean, unobtrusive appearance
+
+** Full Box Style
+Complete rectangular container with all borders:
+
+#+begin_example
+┌─────────────────────────────┐
+│       Centred Title         │
+├─────────────────────────────┤
+│                             │
+│  Content line one           │
+│  Content line two           │
+│                             │
+└─────────────────────────────┘
+#+end_example
+
+Use cases:
+- Highlighting important information
+- Configuration displays
+- Status panels
+- Emphasized messages or warnings
+- Standalone information cards
+
+Characteristics:
+- All four borders present
+- Fixed or calculated width
+- Optional title with separator
+- Padding control (top, bottom, left, right)
+- Content alignment options
+- Box positioning options
+
+** Border Character Sets
+
+*** Rounded (Default)
+Softer, modern aesthetic:
+
+#+begin_example
+╭─────┬─────╮
+│ TL  │ TR  │
+├─────┼─────┤
+│ BL  │ BR  │
+╰─────┴─────╯
+#+end_example
+
+Characters: `╭ ─ ╮ │ ├ ┤ ╰ ╯ ┬ ┴ ┼`
+
+*** Single Line
+Clean, widely-supported Unicode box-drawing:
+
+#+begin_example
+┌─────┬─────┐
+│ TL  │ TR  │
+├─────┼─────┤
+│ BL  │ BR  │
+└─────┴─────┘
+#+end_example
+
+Characters: `┌ ─ ┐ │ ├ ┤ └ ┘ ┬ ┴ ┼`
+
+*** Double Line
+Heavier emphasis, formal appearance:
+
+#+begin_example
+╔═════╦═════╗
+║ TL  ║ TR  ║
+╠═════╬═════╣
+║ BL  ║ BR  ║
+╚═════╩═════╝
+#+end_example
+
+Characters: `╔ ═ ╗ ║ ╠ ╣ ╚ ╝ ╦ ╩ ╬`
+
+*** Heavy
+Strong emphasis, bold appearance:
+
+#+begin_example
+┏━━━━━┳━━━━━┓
+┃ TL  ┃ TR  ┃
+┣━━━━━╋━━━━━┫
+┃ BL  ┃ BR  ┃
+┗━━━━━┻━━━━━┛
+#+end_example
+
+Characters: `┏ ━ ┓ ┃ ┣ ┫ ┗ ┛ ┳ ┻ ╋`
+
+*** ASCII
+Maximum compatibility, basic terminals:
+
+#+begin_example
++-----+-----+
+| TL  | TR  |
++-----+-----+
+| BL  | BR  |
++-----+-----+
+#+end_example
+
+Characters: `+ - + | + + + + + + +`
+
+*** Block with Dropshadow
+Elevated appearance with southeast shadow:
+
+#+begin_example
+┌──────────────────────────────┐
+│                              │░
+│  Content with spacing        │░
+│                              │░
+└──────────────────────────────┘░
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+#+end_example
+
+Or with solid block borders:
+
+#+begin_example
+████████████████████████████████
+█                              █░
+█  High-impact content         █░
+█                              █░
+████████████████████████████████░
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+#+end_example
+
+Characteristics:
+- Light shade `░` creates depth/elevation effect
+- Shadow on right edge and bottom (southeast)
+- Bottom shadow indented to create proper corner
+- Generous padding for sophisticated appearance
+- Creates visual hierarchy through elevation
+- Works well for emphasis and important information
+
+** Mixed Styles
+Users can mix border character sets (e.g., rounded corners with double line sides):
+
+#+begin_example
+╭═════════════╮
+║  Content    ║
+╰═════════════╯
+#+end_example
+
+Or heavy corners with single line sides:
+
+#+begin_example
+┏─────────────┓
+│  Content    │
+┗─────────────┛
+#+end_example
+
+This allows users to create custom aesthetics by specifying individual characters for each border element.
+
+* Design Details
+
+** Content Alignment
+Within the box, content can be aligned:
+- **Left**: Content starts at left padding edge (default)
+- **Centre**: Content centred within available width
+- **Right**: Content aligned to right padding edge
+
+Example of centred content:
+#+begin_example
+┌─────────────────────────────┐
+│                             │
+│      Centred content        │
+│    Another centred line     │
+│                             │
+└─────────────────────────────┘
+#+end_example
+
+** Box Positioning
+The entire box can be positioned:
+- **Left**: Box starts at column 0 (default)
+- **Centre**: Box centred within terminal width
+- **Right**: Box aligned to right edge of terminal
+
+** Padding Configuration
+Control spacing inside the box:
+- Top padding: Empty lines above content
+- Bottom padding: Empty lines below content
+- Left padding: Spaces between border and content
+- Right padding: Spaces between content and right border
+
+Example with padding (top: 1, bottom: 1, left: 2, right: 2):
+#+begin_example
+┌─────────────────┐
+│                 │
+│  Content here   │
+│                 │
+└─────────────────┘
+#+end_example
+
+** Width Configuration
+Box width can be:
+- **Auto**: Calculated from content width plus padding
+- **Fixed**: User-specified exact width
+- **Percentage**: Percentage of terminal width (e.g., 80%)
+- **Max**: Content width up to specified maximum
+
+** Title Support
+Boxes can have titles in multiple positions:
+- **Top-left**: Title after top-left corner (left-bordered and full box)
+- **Top-centre**: Title centred in top border (full box only)
+- **Separate line**: Title on its own line with separator (full box only)
+
+Examples:
+#+begin_example
+┌─ Title Here          ╭─────────────────╮
+│  Content             │  Centred Title  │
+└                      ╰─────────────────╯
+
+┌─────────────────────┐
+│     Section Title   │
+├─────────────────────┤
+│  Content with       │
+│  separator          │
+└─────────────────────┘
+#+end_example
+
+** Colour Support
+Users can customise colours for:
+- Border characters
+- Title text
+- Content text
+- Background (if supported)
+
+Support truecolor, 256-colour, and 16-colour palettes.
+
+** Unicode Handling
+- UTF-8 aware width calculations for proper alignment
+- Handle East Asian Wide characters (width 2)
+- Handle combining marks (width 0)
+- Properly align mixed-width content
+
+* Examples
+
+** Example 1: Simple Left-Bordered Section
+#+begin_example
+┌─ Build Output
+│
+│  Compiling src/main.zig
+│  Compiling src/box.zig
+│  Linking ren
+│
+│  ✓ Build successful
+└
+#+end_example
+
+** Example 2: Centred Information Box
+#+begin_example
+                    ┌────────────────────────┐
+                    │                        │
+                    │    Configuration       │
+                    │                        │
+                    │  version: 0.1.0        │
+                    │  author:  rytswd        │
+                    │  licence: MIT          │
+                    │                        │
+                    └────────────────────────┘
+#+end_example
+
+** Example 3: Warning Box with Heavy Borders
+#+begin_example
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                 ┃
+┃  ⚠ Warning                      ┃
+┃                                 ┃
+┃  This operation is destructive  ┃
+┃  and cannot be undone.          ┃
+┃                                 ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+#+end_example
+
+** Example 4: Nested Left-Bordered Sections
+#+begin_example
+┌─ Test Results
+│
+│  ┌─ Unit Tests
+│  │
+│  │  ✓ box_printer_test
+│  │  ✓ header_test
+│  │
+│  └
+│
+│  ┌─ Integration Tests
+│  │
+│  │  ✓ full_render_test
+│  │  ✗ performance_test
+│  │
+│  └
+│
+└
+#+end_example
+
+** Example 5: Status Panel with Rounded Corners
+#+begin_example
+╭─────────────────────────────╮
+│  System Status              │
+├─────────────────────────────┤
+│                             │
+│  CPU:     45%               │
+│  Memory:  2.3 GB / 16 GB    │
+│  Disk:    120 GB free       │
+│                             │
+│  Status: ✓ All systems OK   │
+│                             │
+╰─────────────────────────────╯
+#+end_example
+
+** Example 6: Elevated Card with Dropshadow
+#+begin_example
+┌────────────────────────────────────────┐
+│                                        │░
+│              ren (練)                  │░
+│                                        │░
+│  A sophisticated terminal rendering    │░
+│  library for Zig                       │░
+│                                        │░
+│  Version:  0.1.0                       │░
+│  Licence:  MIT                         │░
+│                                        │░
+└────────────────────────────────────────┘░
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+#+end_example
+
+** Example 7: Bold Emphasis Block
+#+begin_example
+█████████████████████████████████████████
+█                                       █░
+█  ⚠  Important Notice                  █░
+█                                       █░
+█  This operation requires confirmation █░
+█                                       █░
+█████████████████████████████████████████░
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+#+end_example
+
+* Drawbacks
+- Unicode box characters may not render in very old terminals
+- Width calculation can be complex with mixed-width Unicode
+- Centring requires terminal width detection or fallback
+- Many configuration options may overwhelm simple use cases
+- Different terminal fonts may render box characters with gaps
+
+* Alternatives
+
+** Plain Text Borders
+Use only ASCII characters like `=`, `-`, `|`:
+#+begin_example
+==========================
+  Section Title
+==========================
+
+  Content here
+
+==========================
+#+end_example
+
+Simple but less sophisticated appearance.
+
+** Minimal Borders
+Only use separator lines, no vertical borders:
+#+begin_example
+──────────────────────────
+  Section Title
+──────────────────────────
+
+  Content here
+#+end_example
+
+Clean but provides less visual containment.
+
+** Indent-Only
+No borders, only indentation for grouping:
+#+begin_example
+Section Title
+
+  Content here
+  More content
+#+end_example
+
+Maximises compatibility but loses visual structure.
+
+** Emoji Borders
+Use emoji for corners and decorations:
+#+begin_example
+✨─────────────────────✨
+│   Fancy Content     │
+✨─────────────────────✨
+#+end_example
+
+Eye-catching but breaks in many terminals and not accessible.
+
+* Infrastructure Needed
+All implementable with Zig stdlib - no external dependencies:
+- Unicode width calculation
+- Terminal width detection
+- Colour code utilities (truecolor, 256-colour, 16-colour)
+- Text alignment and padding utilities
+
+* History
+- 2025-12-04: Initial draft created
+
+* References
+- Unicode Box Drawing: https://en.wikipedia.org/wiki/Box-drawing_character
+- Unicode Character Database: https://www.unicode.org/charts/PDF/U2500.pdf
+- East Asian Width: https://www.unicode.org/reports/tr11/

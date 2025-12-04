@@ -1,0 +1,153 @@
+#+title: Header and Sequence Indicator
+#+state: draft
+#+FILETAGS: :box:feature:
+
+* Summary
+Implement sophisticated header styles for terminal output: progress indicators for sequential operations and star headers for single operations. These headers provide refined visual hierarchy with full user configurability for colours, widths, and styling.
+
+* Motivation
+Modern CLI tools demonstrate that well-designed headers significantly improve user experience. Contemporary interfaces use progress indicators, strategic spacing, and refined colour palettes to create elegant, professional output.
+
+For a library named after 洗練 (sophistication), the header design should exemplify refined output - simple in implementation, small in footprint, yet sophisticated in presentation. As a library, users must have full control over styling, colours, and layout to match their application's aesthetic.
+
+** Goals
+- Progress indicator headers for multi-step operations
+- Star headers for single operations with contextual information
+- Terminal-width aware rendering (default 60 columns, user configurable)
+- Unicode-aware centring and spacing
+- Full user control over colour palette (support modern terminals like Ghostty)
+- Configurable default width, colours, and styling
+- Zero external dependencies (only std.Io)
+
+** Non-Goals
+- Interactive TUI features (separate future work)
+- Complex animation or dynamic updates
+- Hardcoded styling that users cannot override
+
+* Proposal
+
+** Progress Indicators for Sequential Operations
+For multi-step operations, show clear progress with dots and counter:
+
+#+begin_example
+● ○ ○ ──────────────────────────────────────── [ 1 / 3 ]
+       Initializing
+────────────────────────────────────────────────────────
+
+  ✓ Created directory structure
+  ✓ Generated configuration
+#+end_example
+
+Visual design (default styling, all configurable):
+- Completed steps: `●` - steps already done
+- Current step: `●` - step in progress
+- Upcoming steps: `○` - steps not yet started
+- Separator line: `─` extends to terminal width
+- Step counter: `[ current / total ]`
+- Title: Centred below dots (or left-aligned if too long)
+- Full separator line below title
+- Terminal-width aware (detect width, default 60 if unavailable)
+
+** Star Header for Single Operations
+For one-off operations or standalone output:
+
+#+begin_example
+⚝ ────────────────────────────────────────────── [ ren ]
+       Configuration
+────────────────────────────────────────────────────────
+
+  main-directory:     ./air/
+  context-directory:  ./air/context/
+#+end_example
+
+Visual design (default styling, all configurable):
+- Star: `⚝` - outlined star character
+- Separator line: `─` extends to terminal width
+- Top right label: `[ ren ]` or contextual info
+- Title: Centred below star
+- Full separator line below title
+
+Top right label options:
+- Library name: `[ ren ]`
+- Operation type: `[ status ]`, `[ info ]`
+- Custom context provided by user
+
+* Design Details
+
+** Configurability
+Users must be able to customise:
+- Colour palette (support RGB/truecolor for modern terminals like Ghostty)
+- Default terminal width (default: 60 columns)
+- Characters used (dots, star, separators)
+- Colour mode (auto/always/never)
+- Spacing and padding
+
+** Default Colour Palette
+Suggested defaults (fully user-configurable):
+- Progress completed: Refined green
+- Progress current: Warm amber/orange
+- Progress upcoming: Subtle grey
+- Star: Warm amber/orange
+- Separator lines: Subtle grey
+- Counter/context: Subtle grey
+
+** Colour Support
+- Support truecolor (24-bit RGB) for modern terminals
+- Fallback to 256-colour palette when needed
+- Support ANSI 16-colour as baseline
+- Auto-detection or user override
+- Respect NO_COLOR environment variable
+
+** Terminal Width
+- Detect terminal width when available
+- Default to 60 columns if detection unavailable
+- User can override default width
+- Cache detection result to avoid repeated syscalls
+
+** Unicode Handling
+- UTF-8 aware width calculations for proper centring
+- Support for box-drawing characters (U+2500 - U+257F)
+- Handle East Asian Wide characters (width 2)
+- Handle combining marks (width 0)
+
+** Title Positioning
+- For wide terminals: Centre title below indicator
+- For narrow terminals or long titles: Left-align with padding
+- Separator line always spans full terminal width
+
+* Drawbacks
+- Terminal width detection can fail in edge cases (containers, pipes)
+- Display width calculation is approximate for some Unicode categories
+- Platform-specific code for terminal detection
+- Configuration API needs to balance simplicity with flexibility
+- Truecolor support detection may not be accurate in all terminals
+
+* Alternatives
+
+** Plain Text Headers
+Use only ASCII and simple formatting - loses visual refinement.
+
+** Box-Style Headers Only
+Use box drawing for all headers - consistent with box printer but less distinct for header emphasis.
+
+** Rich Unicode Everywhere
+Use more elaborate Unicode characters with rounded corners `╭╮╰╯` - beautiful but more complex.
+
+** No Headers
+Let users compose headers entirely from primitives - maximum flexibility but requires more user code.
+
+* Infrastructure Needed
+All implementable with Zig stdlib - no external dependencies:
+- Terminal width detection (POSIX ioctl, Windows Console API)
+- Colour code utilities (RGB truecolor, 256-colour, 16-colour ANSI)
+- Terminal capability detection (truecolor support, colour support)
+- Unicode width calculation
+
+* History
+- 2025-12-04: Initial draft created, inspired by Air CLI UI modernization
+
+* References
+- Air CLI UI Modernization: ~/Coding/github.com/withre/air/main/air/v0.1/cli-ui-modernization.org
+- Unicode East Asian Width: https://www.unicode.org/reports/tr11/
+- ANSI Escape Codes: https://en.wikipedia.org/wiki/ANSI_escape_code
+- Box Drawing Characters: https://en.wikipedia.org/wiki/Box-drawing_character
