@@ -12,6 +12,9 @@ pub const version = std.SemanticVersion{
     .patch = 0,
 };
 
+// Modules
+pub const header = @import("header.zig");
+
 test "version is defined" {
     try std.testing.expect(version.major == 0);
     try std.testing.expect(version.minor == 1);
