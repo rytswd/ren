@@ -10,7 +10,7 @@ const terminal = @import("terminal.zig");
 pub const Config = struct {
     /// Characters used for progress dots
     completed_char: []const u8 = "●",
-    current_char: []const u8 = "●",
+    current_char: []const u8 = "◉",
     upcoming_char: []const u8 = "○",
 
     /// Character used at the start of header (can be empty)
@@ -183,7 +183,7 @@ test "ProgressHeader init" {
 
 test "ProgressHeader render - first step" {
     try expectProgressRender(0, 3, "Initializing", Config{ .use_colour = false },
-        \\● ○ ○ ──────────────────────────────────────────── [ 1 / 3 ]
+        \\◉ ○ ○ ──────────────────────────────────────────── [ 1 / 3 ]
         \\                        Initializing
         \\────────────────────────────────────────────────────────────
         \\
@@ -192,7 +192,7 @@ test "ProgressHeader render - first step" {
 
 test "ProgressHeader render - middle step" {
     try expectProgressRender(1, 3, "Building", Config{ .use_colour = false },
-        \\● ● ○ ──────────────────────────────────────────── [ 2 / 3 ]
+        \\● ◉ ○ ──────────────────────────────────────────── [ 2 / 3 ]
         \\                          Building
         \\────────────────────────────────────────────────────────────
         \\
@@ -201,7 +201,7 @@ test "ProgressHeader render - middle step" {
 
 test "ProgressHeader render - last step" {
     try expectProgressRender(2, 3, "Complete", Config{ .use_colour = false },
-        \\● ● ● ──────────────────────────────────────────── [ 3 / 3 ]
+        \\● ● ◉ ──────────────────────────────────────────── [ 3 / 3 ]
         \\                          Complete
         \\────────────────────────────────────────────────────────────
         \\
@@ -210,7 +210,7 @@ test "ProgressHeader render - last step" {
 
 test "ProgressHeader render - custom width" {
     try expectProgressRender(0, 2, "Test", Config{ .use_colour = false, .width = 40 },
-        \\● ○ ────────────────────────── [ 1 / 2 ]
+        \\◉ ○ ────────────────────────── [ 1 / 2 ]
         \\                  Test
         \\────────────────────────────────────────
         \\
@@ -219,7 +219,7 @@ test "ProgressHeader render - custom width" {
 
 test "ProgressHeader render - custom width odd" {
     try expectProgressRender(0, 2, "Odd", Config{ .use_colour = false, .width = 45 },
-        \\● ○ ─────────────────────────────── [ 1 / 2 ]
+        \\◉ ○ ─────────────────────────────── [ 1 / 2 ]
         \\                     Odd
         \\─────────────────────────────────────────────
         \\
