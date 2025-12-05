@@ -3,6 +3,7 @@
 //! Provides sophisticated header styles with full configurability.
 
 const std = @import("std");
+const colour = @import("colour.zig");
 
 /// Configuration for header appearance
 pub const Config = struct {
@@ -17,11 +18,19 @@ pub const Config = struct {
     /// Separator character
     separator_char: []const u8 = "─",
 
-    /// Default width (columns)
-    default_width: usize = 60,
+    /// Width configuration
+    /// If null, detect and use terminal width; otherwise uses this value
+    width: ?usize = 60,
 
     /// Spacing around title
     title_padding: usize = 7,
+
+    /// Colours - sophisticated defaults from Palette
+    completed_colour: colour.Colour = colour.Palette.refined_green,
+    current_colour: colour.Colour = colour.Palette.warm_amber,
+    upcoming_colour: colour.Colour = colour.Palette.subtle_grey,
+    separator_colour: colour.Colour = colour.Palette.dim_grey,
+    counter_colour: colour.Colour = colour.Palette.dim_grey,
 };
 
 /// Progress header for sequential operations
@@ -45,6 +54,10 @@ pub const ProgressHeader = struct {
     ///              Title
     ///         ────────────────────────────────
     pub fn render(self: ProgressHeader, allocator: std.mem.Allocator, writer: *std.Io.Writer) !void {
+        // Get width (use configured width or fallback to 60)
+        // TODO: Detect terminal width when config.width is null
+        const width = self.config.width orelse 60;
+
         // First line: render progress dots
         for (0..self.total_steps) |i| {
             if (i < self.current_step) {
@@ -62,7 +75,7 @@ pub const ProgressHeader = struct {
         defer allocator.free(counter);
 
         const dots_width = self.total_steps * 2;
-        const separator_width = self.config.default_width - dots_width - counter.len - 1;
+        const separator_width = width - dots_width - counter.len - 1;
 
         for (0..separator_width) |_| {
             try writer.writeAll(self.config.separator_char);
@@ -72,8 +85,8 @@ pub const ProgressHeader = struct {
         try writer.writeAll("\n");
 
         // Second line: title (centred or left-aligned)
-        const padding = if (self.title.len < self.config.default_width)
-            (self.config.default_width - self.title.len) / 2
+        const padding = if (self.title.len < width)
+            (width - self.title.len) / 2
         else
             self.config.title_padding;
 
@@ -84,7 +97,7 @@ pub const ProgressHeader = struct {
         try writer.writeAll("\n");
 
         // Third line: full separator
-        for (0..self.config.default_width) |_| {
+        for (0..width) |_| {
             try writer.writeAll(self.config.separator_char);
         }
         try writer.writeAll("\n");
@@ -150,7 +163,7 @@ test "ProgressHeader render - last step" {
 }
 
 test "ProgressHeader render - custom width" {
-    try expectProgressRender(0, 2, "Test", Config{ .default_width = 40 },
+    try expectProgressRender(0, 2, "Test", Config{ .width = 40 },
         \\● ○ ────────────────────────── [ 1 / 2 ]
         \\                  Test
         \\────────────────────────────────────────
@@ -159,7 +172,7 @@ test "ProgressHeader render - custom width" {
 }
 
 test "ProgressHeader render - custom width odd" {
-    try expectProgressRender(0, 2, "Odd", Config{ .default_width = 45 },
+    try expectProgressRender(0, 2, "Odd", Config{ .width = 45 },
         \\● ○ ─────────────────────────────── [ 1 / 2 ]
         \\                     Odd
         \\─────────────────────────────────────────────
