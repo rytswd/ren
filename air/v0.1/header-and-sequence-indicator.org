@@ -3,7 +3,7 @@
 #+FILETAGS: :box:feature:
 
 * Summary
-Implement sophisticated header styles for terminal output: progress indicators for sequential operations and star headers for single operations. These headers provide refined visual hierarchy with full user configurability for colours, widths, and styling.
+Implement sophisticated header styles for terminal output: progress indicators for sequential operations and starter headers for single operations. These headers provide refined visual hierarchy with full user configurability for colours, widths, and styling.
 
 * Motivation
 Modern CLI tools demonstrate that well-designed headers significantly improve user experience. Contemporary interfaces use progress indicators, strategic spacing, and refined colour palettes to create elegant, professional output.
@@ -12,7 +12,7 @@ For a library named after 洗練 (sophistication), the header design should exem
 
 ** Goals
 - Progress indicator headers for multi-step operations
-- Star headers for single operations with contextual information
+- Starter headers for single operations with contextual information
 - Terminal-width aware rendering (default 60 columns, user configurable)
 - Unicode-aware centring and spacing
 - Full user control over colour palette (support modern terminals like Ghostty)
@@ -48,7 +48,7 @@ Visual design (default styling, all configurable):
 - Full separator line below title
 - Terminal-width aware (detect width, default 60 if unavailable)
 
-** Star Header for Single Operations
+** Starter Header for Single Operations
 For one-off operations or standalone output:
 
 #+begin_example
@@ -61,10 +61,10 @@ For one-off operations or standalone output:
 #+end_example
 
 Visual design (default styling, all configurable):
-- Star: `⚝` - outlined star character
+- Starter char: `⚝` - outlined star character (can be customised or empty)
 - Separator line: `─` extends to terminal width
 - Top right label: `[ ren ]` or contextual info
-- Title: Centred below star
+- Title: Centred below starter
 - Full separator line below title
 
 Top right label options:
