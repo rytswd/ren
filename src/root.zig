@@ -14,6 +14,7 @@ pub const version = std.SemanticVersion{
 
 // Modules
 pub const colour = @import("colour.zig");
+pub const terminal = @import("terminal.zig");
 pub const header = @import("header.zig");
 
 test "version is defined" {
