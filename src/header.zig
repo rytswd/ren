@@ -4,6 +4,7 @@
 
 const std = @import("std");
 const colour = @import("colour.zig");
+const terminal = @import("terminal.zig");
 
 /// Configuration for header appearance
 pub const Config = struct {
@@ -25,12 +26,44 @@ pub const Config = struct {
     /// Spacing around title
     title_padding: usize = 7,
 
-    /// Colours - sophisticated defaults from Palette
-    completed_colour: colour.Colour = colour.Palette.refined_green,
-    current_colour: colour.Colour = colour.Palette.warm_amber,
-    upcoming_colour: colour.Colour = colour.Palette.subtle_grey,
-    separator_colour: colour.Colour = colour.Palette.dim_grey,
-    counter_colour: colour.Colour = colour.Palette.dim_grey,
+    /// Enable colours (default: true for sophisticated output)
+    use_colour: bool = true,
+
+    /// Colour palette to use
+    palette: colour.Palette = colour.ren,
+
+    /// Helper: write text with colour based on Type
+    pub fn write(
+        self: Config,
+        allocator: std.mem.Allocator,
+        writer: *std.Io.Writer,
+        colour_type: colour.Type,
+        text: []const u8,
+    ) !void {
+        if (self.use_colour) {
+            const col = self.palette.get(colour_type);
+            try col.write(allocator, writer, text);
+        } else {
+            try writer.writeAll(text);
+        }
+    }
+
+    /// Convenience methods for common colour types
+    pub fn write_neutral(self: Config, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
+        try self.write(allocator, writer, .neutral, text);
+    }
+    pub fn write_primary(self: Config, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
+        try self.write(allocator, writer, .primary, text);
+    }
+    pub fn write_secondary(self: Config, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
+        try self.write(allocator, writer, .secondary, text);
+    }
+    pub fn write_accent(self: Config, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
+        try self.write(allocator, writer, .accent, text);
+    }
+    pub fn write_subtle(self: Config, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
+        try self.write(allocator, writer, .subtle, text);
+    }
 };
 
 /// Progress header for sequential operations
@@ -49,39 +82,45 @@ pub const ProgressHeader = struct {
         };
     }
 
-    /// Render the progress header
+    /// Render the progress header with colours
     /// Format: ● ○ ○ ──────────────── [ 1 / 3 ]
     ///              Title
     ///         ────────────────────────────────
     pub fn render(self: ProgressHeader, allocator: std.mem.Allocator, writer: *std.Io.Writer) !void {
-        // Get width (use configured width or fallback to 60)
-        // TODO: Detect terminal width when config.width is null
-        const width = self.config.width orelse 60;
+        // Get width: configured > detected > fallback to 60
+        const width = self.config.width orelse terminal.detectWidth() orelse 60;
 
-        // First line: render progress dots
+        // First line: render progress dots with colours
         for (0..self.total_steps) |i| {
             if (i < self.current_step) {
-                try writer.writeAll(self.config.completed_char);
+                try self.config.write_accent(allocator, writer, self.config.completed_char);
             } else if (i == self.current_step) {
-                try writer.writeAll(self.config.current_char);
+                try self.config.write_primary(allocator, writer, self.config.current_char);
             } else {
-                try writer.writeAll(self.config.upcoming_char);
+                try self.config.write_subtle(allocator, writer, self.config.upcoming_char);
             }
             try writer.writeAll(" ");
         }
 
-        // Render separator and counter
+        // Render separator
+        const dots_width = self.total_steps * 2;
         const counter = try std.fmt.allocPrint(allocator, "[ {} / {} ]", .{ self.current_step + 1, self.total_steps });
         defer allocator.free(counter);
-
-        const dots_width = self.total_steps * 2;
         const separator_width = width - dots_width - counter.len - 1;
 
+        const separator_line = try allocator.alloc(u8, separator_width * 3); // UTF-8 char can be 3 bytes
+        defer allocator.free(separator_line);
+        var pos: usize = 0;
         for (0..separator_width) |_| {
-            try writer.writeAll(self.config.separator_char);
+            for (self.config.separator_char) |byte| {
+                separator_line[pos] = byte;
+                pos += 1;
+            }
         }
+        try self.config.write_secondary(allocator, writer, separator_line[0..pos]);
+
         try writer.writeAll(" ");
-        try writer.writeAll(counter);
+        try self.config.write_secondary(allocator, writer, counter);
         try writer.writeAll("\n");
 
         // Second line: title (centred or left-aligned)
@@ -97,9 +136,16 @@ pub const ProgressHeader = struct {
         try writer.writeAll("\n");
 
         // Third line: full separator
+        const bottom_sep = try allocator.alloc(u8, width * 3);
+        defer allocator.free(bottom_sep);
+        var bottom_pos: usize = 0;
         for (0..width) |_| {
-            try writer.writeAll(self.config.separator_char);
+            for (self.config.separator_char) |byte| {
+                bottom_sep[bottom_pos] = byte;
+                bottom_pos += 1;
+            }
         }
+        try self.config.write_secondary(allocator, writer, bottom_sep[0..bottom_pos]);
         try writer.writeAll("\n");
 
         try writer.flush();
@@ -136,7 +182,7 @@ test "ProgressHeader init" {
 }
 
 test "ProgressHeader render - first step" {
-    try expectProgressRender(0, 3, "Initializing", Config{},
+    try expectProgressRender(0, 3, "Initializing", Config{ .use_colour = false },
         \\● ○ ○ ──────────────────────────────────────────── [ 1 / 3 ]
         \\                        Initializing
         \\────────────────────────────────────────────────────────────
@@ -145,7 +191,7 @@ test "ProgressHeader render - first step" {
 }
 
 test "ProgressHeader render - middle step" {
-    try expectProgressRender(1, 3, "Building", Config{},
+    try expectProgressRender(1, 3, "Building", Config{ .use_colour = false },
         \\● ● ○ ──────────────────────────────────────────── [ 2 / 3 ]
         \\                          Building
         \\────────────────────────────────────────────────────────────
@@ -154,7 +200,7 @@ test "ProgressHeader render - middle step" {
 }
 
 test "ProgressHeader render - last step" {
-    try expectProgressRender(2, 3, "Complete", Config{},
+    try expectProgressRender(2, 3, "Complete", Config{ .use_colour = false },
         \\● ● ● ──────────────────────────────────────────── [ 3 / 3 ]
         \\                          Complete
         \\────────────────────────────────────────────────────────────
@@ -163,7 +209,7 @@ test "ProgressHeader render - last step" {
 }
 
 test "ProgressHeader render - custom width" {
-    try expectProgressRender(0, 2, "Test", Config{ .width = 40 },
+    try expectProgressRender(0, 2, "Test", Config{ .use_colour = false, .width = 40 },
         \\● ○ ────────────────────────── [ 1 / 2 ]
         \\                  Test
         \\────────────────────────────────────────
@@ -172,7 +218,7 @@ test "ProgressHeader render - custom width" {
 }
 
 test "ProgressHeader render - custom width odd" {
-    try expectProgressRender(0, 2, "Odd", Config{ .width = 45 },
+    try expectProgressRender(0, 2, "Odd", Config{ .use_colour = false, .width = 45 },
         \\● ○ ─────────────────────────────── [ 1 / 2 ]
         \\                     Odd
         \\─────────────────────────────────────────────
