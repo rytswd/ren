@@ -22,8 +22,8 @@ pub const Config = struct {
     /// Enable colours (default: true for sophisticated output)
     use_colour: bool = true,
 
-    /// Use rainbow gradient for separators (requires use_colour = true)
-    use_rainbow: bool = false,
+    /// Gradient for separator lines (null = use solid palette colour)
+    separator_gradient: ?colour.Gradient = null,
 
     /// Colour palette to use
     palette: colour.Palette = colour.ren,
@@ -73,13 +73,15 @@ pub const Config = struct {
         offset: usize,
         total_width: usize,
     ) !void {
-        if (self.use_colour and self.use_rainbow) {
-            // Rainbow gradient aligned to full line width
+        if (self.use_colour and self.separator_gradient != null) {
+            // Gradient rendering aligned to full line width
+            const gradient = self.separator_gradient.?;
             for (0..width) |i| {
                 const t: f32 = @as(f32, @floatFromInt(offset + i)) / @as(f32, @floatFromInt(total_width));
-                const col = colour.rainbow(t);
-                try col.write(allocator, writer, self.separator_marker);
+                const col = gradient.get(t);
+                try col.writeNoReset(allocator, writer, self.separator_marker);
             }
+            try writer.writeAll(colour.reset);
         } else {
             // Solid colour or plain
             const total_len = self.separator_marker.len * width;
@@ -314,6 +316,40 @@ pub const StarterHeader = struct {
         try writer.flush();
     }
 };
+
+test "Config renderSeparator two_colour gradient - exact 60 char match" {
+    const allocator = std.testing.allocator;
+
+    var output_buffer: [8192]u8 = undefined;
+    var output_writer = std.Io.Writer.fixed(&output_buffer);
+
+    const config = Config{
+        .separator_gradient = .{ .two_colour = .{
+            .start = .{ .r = 100, .g = 200, .b = 100 },
+            .end = .{ .r = 200, .g = 100, .b = 200 },
+        } },
+    };
+
+    try config.renderSeparator(allocator, &output_writer, 60, 0, 60);
+
+    const output = output_writer.buffered();
+
+    const expected =
+        "\x1b[38;2;100;200;100m─" ++ "\x1b[38;2;101;198;101m─" ++ "\x1b[38;2;103;196;103m─" ++ "\x1b[38;2;105;195;105m─" ++ "\x1b[38;2;106;193;106m─" ++
+        "\x1b[38;2;108;191;108m─" ++ "\x1b[38;2;110;190;110m─" ++ "\x1b[38;2;111;188;111m─" ++ "\x1b[38;2;113;186;113m─" ++ "\x1b[38;2;115;185;115m─" ++
+        "\x1b[38;2;116;183;116m─" ++ "\x1b[38;2;118;181;118m─" ++ "\x1b[38;2;120;180;120m─" ++ "\x1b[38;2;121;178;121m─" ++ "\x1b[38;2;123;176;123m─" ++
+        "\x1b[38;2;125;175;125m─" ++ "\x1b[38;2;126;173;126m─" ++ "\x1b[38;2;128;171;128m─" ++ "\x1b[38;2;130;170;130m─" ++ "\x1b[38;2;131;168;131m─" ++
+        "\x1b[38;2;133;166;133m─" ++ "\x1b[38;2;135;165;135m─" ++ "\x1b[38;2;136;163;136m─" ++ "\x1b[38;2;138;161;138m─" ++ "\x1b[38;2;140;160;140m─" ++
+        "\x1b[38;2;141;158;141m─" ++ "\x1b[38;2;143;156;143m─" ++ "\x1b[38;2;145;155;145m─" ++ "\x1b[38;2;146;153;146m─" ++ "\x1b[38;2;148;151;148m─" ++
+        "\x1b[38;2;150;150;150m─" ++ "\x1b[38;2;151;148;151m─" ++ "\x1b[38;2;153;146;153m─" ++ "\x1b[38;2;155;145;155m─" ++ "\x1b[38;2;156;143;156m─" ++
+        "\x1b[38;2;158;141;158m─" ++ "\x1b[38;2;160;140;160m─" ++ "\x1b[38;2;161;138;161m─" ++ "\x1b[38;2;163;136;163m─" ++ "\x1b[38;2;165;135;165m─" ++
+        "\x1b[38;2;166;133;166m─" ++ "\x1b[38;2;168;131;168m─" ++ "\x1b[38;2;170;130;170m─" ++ "\x1b[38;2;171;128;171m─" ++ "\x1b[38;2;173;126;173m─" ++
+        "\x1b[38;2;175;125;175m─" ++ "\x1b[38;2;176;123;176m─" ++ "\x1b[38;2;178;121;178m─" ++ "\x1b[38;2;180;120;180m─" ++ "\x1b[38;2;181;118;181m─" ++
+        "\x1b[38;2;183;116;183m─" ++ "\x1b[38;2;185;115;185m─" ++ "\x1b[38;2;186;113;186m─" ++ "\x1b[38;2;188;111;188m─" ++ "\x1b[38;2;190;110;190m─" ++
+        "\x1b[38;2;191;108;191m─" ++ "\x1b[38;2;193;106;193m─" ++ "\x1b[38;2;195;105;195m─" ++ "\x1b[38;2;196;103;196m─" ++ "\x1b[38;2;198;101;198m─" ++ "\x1b[0m";
+
+    try std.testing.expectEqualStrings(expected, output);
+}
 
 // Helper: build separator line from separator char repeated count times
 fn buildSeparatorLine(allocator: std.mem.Allocator, separator_char: []const u8, count: usize) ![]u8 {
