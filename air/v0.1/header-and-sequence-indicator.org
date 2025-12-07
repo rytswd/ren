@@ -1,6 +1,6 @@
 #+title: Header and Sequence Indicator
-#+state: draft
-#+FILETAGS: :box:feature:
+#+state: work-in-progress
+#+FILETAGS: :header:feature:
 
 * Summary
 Implement sophisticated header styles for terminal output: progress indicators for sequential operations and starter headers for single operations. These headers provide refined visual hierarchy with full user configurability for colours, widths, and styling.
@@ -38,15 +38,16 @@ For multi-step operations, show clear progress with dots and counter:
   ✓ Generated configuration
 #+end_example
 
-Visual design (default styling, all configurable):
-- Completed steps: `●` - steps already done
-- Current step: `●` - step in progress
-- Upcoming steps: `○` - steps not yet started
-- Separator line: `─` extends to terminal width
-- Step counter: `[ current / total ]`
-- Title: Centred below dots (or left-aligned if too long)
-- Full separator line below title
-- Terminal-width aware (detect width, default 60 if unavailable)
+Visual design (implemented with defaults):
+- Completed steps: `●` - solid circle (accent colour)
+- Current step: `◉` - fisheye, visually distinct (primary colour)
+- Upcoming steps: `○` - empty circle (subtle colour)
+- Separator line: `─` extends to width (secondary colour)
+- Step counter: `[ current / total ]` (secondary colour)
+- Title: Centred below dots
+- Full separator line below title (can be rainbow)
+- Terminal-width aware (auto-detect, fallback 60)
+- All-completed state: shows all dots as `●` when current_step >= total_steps
 
 ** Starter Header for Single Operations
 For one-off operations or standalone output:
@@ -137,14 +138,24 @@ Use more elaborate Unicode characters with rounded corners `╭╮╰╯` - beau
 Let users compose headers entirely from primitives - maximum flexibility but requires more user code.
 
 * Infrastructure Needed
-All implementable with Zig stdlib - no external dependencies:
-- Terminal width detection (POSIX ioctl, Windows Console API)
-- Colour code utilities (RGB truecolor, 256-colour, 16-colour ANSI)
-- Terminal capability detection (truecolor support, colour support)
-- Unicode width calculation
+Implemented with Zig stdlib (zero external dependencies):
+- ✓ Terminal width detection (POSIX ioctl with /dev/tty)
+- ✓ Colour code utilities (RGB truecolor ANSI escape codes)
+- ✓ Unicode width calculation (UTF-8 iteration)
+- ✓ HSV to RGB conversion for rainbow
+- ⚠ Windows Console API for terminal width (TODO)
+- ⚠ 256-colour and 16-colour fallbacks (TODO)
 
 * History
-- 2025-12-04: Initial draft created, inspired by Air CLI UI modernization
+- 2025-12-04: Initial draft created
+- 2025-12-07: Implementation completed
+  - ProgressHeader with all states including all-completed
+  - StarterHeader with customisable markers
+  - Truecolor support with four predefined palettes
+  - Rainbow gradient separators with position alignment
+  - Terminal width auto-detection (POSIX)
+  - Unicode width calculation
+  - Comprehensive test coverage
 
 * References
 - Air CLI UI Modernization: ~/Coding/github.com/withre/air/main/air/v0.1/cli-ui-modernization.org
