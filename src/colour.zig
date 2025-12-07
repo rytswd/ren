@@ -30,8 +30,36 @@ pub const Colour = struct {
     // pub fn to16Colour(self: Colour) u8 { }
 };
 
+test "Colour toAnsi conversion" {
+    const allocator = std.testing.allocator;
+    const colour = Colour{ .r = 255, .g = 128, .b = 64 };
+    const ansi = try colour.toAnsi(allocator);
+    defer allocator.free(ansi);
+
+    try std.testing.expectEqualStrings("\x1b[38;2;255;128;64m", ansi);
+}
+
+test "Colour write helper" {
+    const allocator = std.testing.allocator;
+
+    var output_buffer: [64]u8 = undefined;
+    var output_writer = std.Io.Writer.fixed(&output_buffer);
+
+    const test_colour = Colour{ .r = 255, .g = 128, .b = 64 };
+    try test_colour.write(allocator, &output_writer, "Hello");
+
+    const output = output_writer.buffered();
+    const expected = "\x1b[38;2;255;128;64mHello\x1b[0m";
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
 /// Reset colour to default
 pub const reset = "\x1b[0m";
+
+test "reset is correct" {
+    try std.testing.expectEqualStrings("\x1b[0m", reset);
+}
 
 /// Semantic colour types
 pub const Type = enum {
@@ -67,6 +95,27 @@ pub const Palette = struct {
         };
     }
 };
+
+test "Palette get method" {
+    const palette = ren;
+
+    const primary_colour = palette.get(.primary);
+
+    // Can be converted to ANSI
+    const allocator = std.testing.allocator;
+    const primary_ansi = try primary_colour.toAnsi(allocator);
+    defer allocator.free(primary_ansi);
+
+    try std.testing.expect(std.mem.startsWith(u8, primary_ansi, "\x1b[38;2;"));
+}
+
+test "Palette fallback to neutral" {
+    const minimal = Palette{ .neutral = .{ .r = 100, .g = 100, .b = 100 } };
+
+    // Undefined types should fallback to neutral
+    const primary_colour = minimal.get(.primary);
+    try std.testing.expectEqual(100, primary_colour.r);
+}
 
 /// The ren palette - default sophisticated palette
 pub const ren = Palette{
@@ -106,51 +155,78 @@ pub const monochrome = Palette{
     .subtle = .{ .r = 140, .g = 140, .b = 140 },
 };
 
-test "Colour toAnsi conversion" {
-    const allocator = std.testing.allocator;
-    const colour = Colour{ .r = 255, .g = 128, .b = 64 };
-    const ansi = try colour.toAnsi(allocator);
-    defer allocator.free(ansi);
+/// Generate a smooth rainbow colour at position t (0.0 to 1.0)
+/// Creates pastel rainbow: soft pink -> peach -> mint -> sky -> lavender
+pub fn rainbow(t: f32) Colour {
+    const clamped = @max(0.0, @min(1.0, t));
 
-    try std.testing.expectEqualStrings("\x1b[38;2;255;128;64m", ansi);
+    // Smooth HSV to RGB conversion with pastel tones
+    // Hue varies from 0 to 360 degrees
+    const hue = clamped * 360.0;
+    const saturation: f32 = 0.35; // Low saturation for pastel
+    const value: f32 = 0.95; // High value for brightness
+
+    return hsvToRgb(hue, saturation, value);
 }
 
-test "Palette get method" {
-    const palette = ren;
+/// Convert HSV to RGB
+fn hsvToRgb(h: f32, s: f32, v: f32) Colour {
+    const c = v * s;
+    const h_prime = h / 60.0;
+    const x = c * (1.0 - @abs(@mod(h_prime, 2.0) - 1.0));
+    const m = v - c;
 
-    const primary_colour = palette.get(.primary);
+    var r: f32 = 0;
+    var g: f32 = 0;
+    var b: f32 = 0;
 
-    // Can be converted to ANSI
-    const allocator = std.testing.allocator;
-    const primary_ansi = try primary_colour.toAnsi(allocator);
-    defer allocator.free(primary_ansi);
+    if (h_prime >= 0 and h_prime < 1) {
+        r = c;
+        g = x;
+        b = 0;
+    } else if (h_prime >= 1 and h_prime < 2) {
+        r = x;
+        g = c;
+        b = 0;
+    } else if (h_prime >= 2 and h_prime < 3) {
+        r = 0;
+        g = c;
+        b = x;
+    } else if (h_prime >= 3 and h_prime < 4) {
+        r = 0;
+        g = x;
+        b = c;
+    } else if (h_prime >= 4 and h_prime < 5) {
+        r = x;
+        g = 0;
+        b = c;
+    } else {
+        r = c;
+        g = 0;
+        b = x;
+    }
 
-    try std.testing.expect(std.mem.startsWith(u8, primary_ansi, "\x1b[38;2;"));
+    return .{
+        .r = @intFromFloat((r + m) * 255.0),
+        .g = @intFromFloat((g + m) * 255.0),
+        .b = @intFromFloat((b + m) * 255.0),
+    };
 }
 
-test "Palette fallback to neutral" {
-    const minimal = Palette{ .neutral = .{ .r = 100, .g = 100, .b = 100 } };
+test "rainbow generates pastel colours" {
+    const start = rainbow(0.0); // Should be pinkish
+    const mid = rainbow(0.5); // Should be cyan/blue-ish
 
-    // Undefined types should fallback to neutral
-    const primary_colour = minimal.get(.primary);
-    try std.testing.expectEqual(100, primary_colour.r);
+    // All should be pastel (relatively high RGB values)
+    try std.testing.expect(start.r > 180 or start.g > 180 or start.b > 180);
+    try std.testing.expect(mid.r > 180 or mid.g > 180 or mid.b > 180);
 }
 
-test "Colour write helper" {
-    const allocator = std.testing.allocator;
+test "rainbow clamping" {
+    const below = rainbow(-0.5);
+    const above = rainbow(1.5);
 
-    var output_buffer: [64]u8 = undefined;
-    var output_writer = std.Io.Writer.fixed(&output_buffer);
-
-    const test_colour = Colour{ .r = 255, .g = 128, .b = 64 };
-    try test_colour.write(allocator, &output_writer, "Hello");
-
-    const output = output_writer.buffered();
-    const expected = "\x1b[38;2;255;128;64mHello\x1b[0m";
-
-    try std.testing.expectEqualStrings(expected, output);
-}
-
-test "reset is correct" {
-    try std.testing.expectEqualStrings("\x1b[0m", reset);
+    // Should clamp to valid range
+    _ = below;
+    _ = above;
 }

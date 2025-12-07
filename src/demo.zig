@@ -80,5 +80,12 @@ pub fn main() !void {
     try starter2.render(allocator, stdout);
     try stdout.print("\n\n", .{});
 
+    // Demo: Rainbow separator
+    try stdout.print("  Rainbow separator:\n\n", .{});
+    const rainbow_config = ren.header.Config{ .use_rainbow = true };
+    const sep_width = term_width orelse 60;
+    try rainbow_config.renderSeparator(allocator, stdout, sep_width, 0, sep_width);
+    try stdout.print("\n\n", .{});
+
     try stdout.flush();
 }

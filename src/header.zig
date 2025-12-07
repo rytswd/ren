@@ -22,6 +22,9 @@ pub const Config = struct {
     /// Enable colours (default: true for sophisticated output)
     use_colour: bool = true,
 
+    /// Use rainbow gradient for separators (requires use_colour = true)
+    use_rainbow: bool = false,
+
     /// Colour palette to use
     palette: colour.Palette = colour.ren,
 
@@ -56,6 +59,41 @@ pub const Config = struct {
     }
     pub fn write_subtle(self: Config, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
         try self.write(allocator, writer, .subtle, text);
+    }
+
+    /// Render a separator line (handles rainbow, colour, width)
+    /// Does NOT add newline - caller must add it
+    /// offset: starting column position for rainbow alignment (0 = start of line)
+    /// total_width: total line width for rainbow gradient calculation
+    pub fn renderSeparator(
+        self: Config,
+        allocator: std.mem.Allocator,
+        writer: *std.Io.Writer,
+        width: usize,
+        offset: usize,
+        total_width: usize,
+    ) !void {
+        if (self.use_colour and self.use_rainbow) {
+            // Rainbow gradient aligned to full line width
+            for (0..width) |i| {
+                const t: f32 = @as(f32, @floatFromInt(offset + i)) / @as(f32, @floatFromInt(total_width));
+                const col = colour.rainbow(t);
+                try col.write(allocator, writer, self.separator_marker);
+            }
+        } else {
+            // Solid colour or plain
+            const total_len = self.separator_marker.len * width;
+            const line = try allocator.alloc(u8, total_len);
+            defer allocator.free(line);
+            var pos: usize = 0;
+            for (0..width) |_| {
+                for (self.separator_marker) |byte| {
+                    line[pos] = byte;
+                    pos += 1;
+                }
+            }
+            try self.write_secondary(allocator, writer, line);
+        }
     }
 };
 
@@ -122,7 +160,8 @@ pub const ProgressHeader = struct {
         try renderCentredTitle(writer, self.title, width, self.config.title_padding);
 
         // Third line: full separator
-        try renderBottomSeparator(allocator, writer, self.config, width);
+        try self.config.renderSeparator(allocator, writer, width, 0, width);
+        try writer.writeAll("\n");
 
         try writer.flush();
     }
@@ -174,9 +213,7 @@ pub const StarterHeader = struct {
         else
             width - used_width; // no space needed when no context
 
-        const separator_line = try buildSeparatorLine(allocator, self.config.separator_marker, separator_width);
-        defer allocator.free(separator_line);
-        try self.config.write_secondary(allocator, writer, separator_line);
+        try self.config.renderSeparator(allocator, writer, separator_width, used_width, width);
 
         if (context_text.len > 0) {
             try writer.writeAll(" ");
@@ -188,7 +225,8 @@ pub const StarterHeader = struct {
         try renderCentredTitle(writer, self.title, width, self.config.title_padding);
 
         // Third line: full separator
-        try renderBottomSeparator(allocator, writer, self.config, width);
+        try self.config.renderSeparator(allocator, writer, width, 0, width);
+        try writer.writeAll("\n");
 
         try writer.flush();
     }
@@ -219,14 +257,6 @@ fn renderCentredTitle(writer: *std.Io.Writer, title: []const u8, width: usize, t
         try writer.writeAll(" ");
     }
     try writer.writeAll(title);
-    try writer.writeAll("\n");
-}
-
-// Helper: render full-width separator line at bottom
-fn renderBottomSeparator(allocator: std.mem.Allocator, writer: *std.Io.Writer, config: Config, width: usize) !void {
-    const separator_line = try buildSeparatorLine(allocator, config.separator_marker, width);
-    defer allocator.free(separator_line);
-    try config.write_secondary(allocator, writer, separator_line);
     try writer.writeAll("\n");
 }
 
