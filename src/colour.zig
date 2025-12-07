@@ -4,18 +4,62 @@
 
 const std = @import("std");
 
+// Helper: parse two hex characters to byte (comptime)
+fn parseHexByte(comptime hex: []const u8) u8 {
+    if (hex.len != 2) @compileError("Hex byte must be 2 characters");
+
+    const hi = parseHexDigit(hex[0]);
+    const lo = parseHexDigit(hex[1]);
+
+    return hi * 16 + lo;
+}
+
+// Helper: parse single hex digit (comptime)
+fn parseHexDigit(comptime c: u8) u8 {
+    return switch (c) {
+        '0'...'9' => c - '0',
+        'a'...'f' => c - 'a' + 10,
+        'A'...'F' => c - 'A' + 10,
+        else => @compileError("Invalid hex digit"),
+    };
+}
+
 /// RGB colour value for truecolor support
 pub const Colour = struct {
     r: u8,
     g: u8,
     b: u8,
 
+    /// Create colour from hex string at compile time
+    /// Accepts "#RRGGBB", "RRGGBB", "#RGB", or "RGB"
+    pub fn hex(comptime str: []const u8) Colour {
+        const s = if (str.len > 0 and str[0] == '#') str[1..] else str;
+
+        if (s.len == 3) {
+            // Short form: #RGB -> #RRGGBB
+            return .{
+                .r = comptime parseHexDigit(s[0]) * 17, // F -> FF (15 * 17 = 255)
+                .g = comptime parseHexDigit(s[1]) * 17,
+                .b = comptime parseHexDigit(s[2]) * 17,
+            };
+        } else if (s.len == 6) {
+            // Full form: #RRGGBB
+            return .{
+                .r = comptime parseHexByte(s[0..2]),
+                .g = comptime parseHexByte(s[2..4]),
+                .b = comptime parseHexByte(s[4..6]),
+            };
+        } else {
+            @compileError("Hex colour must be 3 (RGB) or 6 (RRGGBB) characters");
+        }
+    }
+
     /// Convert to ANSI truecolor escape code
     pub fn toAnsi(self: Colour, allocator: std.mem.Allocator) ![]u8 {
         return try std.fmt.allocPrint(allocator, "\x1b[38;2;{};{};{}m", .{ self.r, self.g, self.b });
     }
 
-    /// Write text with this colour to a writer
+    /// Write text with this colour to a writer (includes reset)
     pub fn write(self: Colour, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
         const ansi = try self.toAnsi(allocator);
         defer allocator.free(ansi);
@@ -25,10 +69,74 @@ pub const Colour = struct {
         try writer.writeAll(reset);
     }
 
+    /// Write text with this colour without reset (for continuous sequences)
+    pub fn writeNoReset(self: Colour, allocator: std.mem.Allocator, writer: *std.Io.Writer, text: []const u8) !void {
+        const ansi = try self.toAnsi(allocator);
+        defer allocator.free(ansi);
+
+        try writer.writeAll(ansi);
+        try writer.writeAll(text);
+    }
+
     // TODO: Add fallback conversion methods for terminal compatibility
     // pub fn to256Colour(self: Colour) u8 { }
     // pub fn to16Colour(self: Colour) u8 { }
 };
+
+test "Colour hex parsing - 6 digit" {
+    const c1 = Colour.hex("#FF8040");
+    try std.testing.expectEqual(255, c1.r);
+    try std.testing.expectEqual(128, c1.g);
+    try std.testing.expectEqual(64, c1.b);
+
+    const c2 = Colour.hex("A0B0C0");
+    try std.testing.expectEqual(160, c2.r);
+    try std.testing.expectEqual(176, c2.g);
+    try std.testing.expectEqual(192, c2.b);
+
+    // Case insensitive
+    const c3 = Colour.hex("aabbcc");
+    try std.testing.expectEqual(170, c3.r);
+    try std.testing.expectEqual(187, c3.g);
+    try std.testing.expectEqual(204, c3.b);
+}
+
+test "Colour hex parsing - 3 digit shorthand" {
+    const c1 = Colour.hex("#FFF");
+    try std.testing.expectEqual(255, c1.r);
+    try std.testing.expectEqual(255, c1.g);
+    try std.testing.expectEqual(255, c1.b);
+
+    const c2 = Colour.hex("F80"); // #FF8800
+    try std.testing.expectEqual(255, c2.r);
+    try std.testing.expectEqual(136, c2.g); // 8 * 17 = 136
+    try std.testing.expectEqual(0, c2.b);
+
+    const c3 = Colour.hex("#ABC");
+    try std.testing.expectEqual(170, c3.r); // A * 17 = 170
+    try std.testing.expectEqual(187, c3.g); // B * 17 = 187
+    try std.testing.expectEqual(204, c3.b); // C * 17 = 204
+}
+
+test "Colour hex usage in gradients" {
+    const grad = Gradient{ .two_colour = .{
+        .start = Colour.hex("#9DC8C8"),
+        .end = Colour.hex("#9D9DF2"),
+    } };
+
+    const start_col = grad.get(0.0);
+    try std.testing.expectEqual(157, start_col.r);
+    try std.testing.expectEqual(200, start_col.g);
+    try std.testing.expectEqual(200, start_col.b);
+}
+
+// Compile error tests (these should fail at compile time if uncommented)
+// test "Colour hex - invalid length" {
+//     const c = Colour.hex("#FFF");  // Error: must be 6 characters
+// }
+// test "Colour hex - invalid character" {
+//     const c = Colour.hex("#GGGGGG");  // Error: invalid hex digit
+// }
 
 test "Colour toAnsi conversion" {
     const allocator = std.testing.allocator;
@@ -50,6 +158,27 @@ test "Colour write helper" {
 
     const output = output_writer.buffered();
     const expected = "\x1b[38;2;255;128;64mHello\x1b[0m";
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
+test "Colour writeNoReset for sequences" {
+    const allocator = std.testing.allocator;
+
+    var output_buffer: [128]u8 = undefined;
+    var output_writer = std.Io.Writer.fixed(&output_buffer);
+
+    const c1 = Colour{ .r = 100, .g = 100, .b = 100 };
+    const c2 = Colour{ .r = 150, .g = 150, .b = 150 };
+    const c3 = Colour{ .r = 200, .g = 200, .b = 200 };
+
+    try c1.writeNoReset(allocator, &output_writer, "A");
+    try c2.writeNoReset(allocator, &output_writer, "B");
+    try c3.writeNoReset(allocator, &output_writer, "C");
+    try output_writer.writeAll(reset);
+
+    const output = output_writer.buffered();
+    const expected = "\x1b[38;2;100;100;100mA" ++ "\x1b[38;2;150;150;150mB" ++ "\x1b[38;2;200;200;200mC" ++ "\x1b[0m";
 
     try std.testing.expectEqualStrings(expected, output);
 }
@@ -155,6 +284,47 @@ pub const monochrome = Palette{
     .subtle = .{ .r = 140, .g = 140, .b = 140 },
 };
 
+/// Gradient types for separator lines
+pub const Gradient = union(enum) {
+    solid: Colour,
+    rainbow,
+    two_colour: struct {
+        start: Colour,
+        end: Colour,
+    },
+    three_colour: struct {
+        start: Colour,
+        mid: Colour,
+        end: Colour,
+    },
+
+    /// Get colour at position t (0.0 to 1.0)
+    pub fn get(self: Gradient, t: f32) Colour {
+        return switch (self) {
+            .solid => |c| c,
+            .rainbow => rainbow(t),
+            .two_colour => |tc| interpolate(tc.start, tc.end, t),
+            .three_colour => |tc| interpolateThree(tc.start, tc.mid, tc.end, t),
+        };
+    }
+};
+
+test "Gradient solid" {
+    const grad = Gradient{ .solid = .{ .r = 100, .g = 150, .b = 200 } };
+    const c = grad.get(0.5);
+    try std.testing.expectEqual(100, c.r);
+    try std.testing.expectEqual(150, c.g);
+}
+
+test "Gradient two_colour" {
+    const grad = Gradient{ .two_colour = .{
+        .start = .{ .r = 0, .g = 0, .b = 0 },
+        .end = .{ .r = 100, .g = 100, .b = 100 },
+    } };
+    const mid = grad.get(0.5);
+    try std.testing.expectEqual(50, mid.r);
+}
+
 /// Generate a smooth rainbow colour at position t (0.0 to 1.0)
 /// Creates pastel rainbow: soft pink -> peach -> mint -> sky -> lavender
 pub fn rainbow(t: f32) Colour {
@@ -211,6 +381,63 @@ fn hsvToRgb(h: f32, s: f32, v: f32) Colour {
         .g = @intFromFloat((g + m) * 255.0),
         .b = @intFromFloat((b + m) * 255.0),
     };
+}
+
+/// Linear interpolation between two colours
+pub fn interpolate(start: Colour, end: Colour, t: f32) Colour {
+    const clamped = @max(0.0, @min(1.0, t));
+
+    const r = @as(f32, @floatFromInt(start.r)) * (1.0 - clamped) + @as(f32, @floatFromInt(end.r)) * clamped;
+    const g = @as(f32, @floatFromInt(start.g)) * (1.0 - clamped) + @as(f32, @floatFromInt(end.g)) * clamped;
+    const b = @as(f32, @floatFromInt(start.b)) * (1.0 - clamped) + @as(f32, @floatFromInt(end.b)) * clamped;
+
+    return .{
+        .r = @intFromFloat(r),
+        .g = @intFromFloat(g),
+        .b = @intFromFloat(b),
+    };
+}
+
+test "interpolate at endpoints" {
+    const start = Colour{ .r = 0, .g = 0, .b = 0 };
+    const end = Colour{ .r = 100, .g = 100, .b = 100 };
+
+    const at_start = interpolate(start, end, 0.0);
+    try std.testing.expectEqual(0, at_start.r);
+
+    const at_end = interpolate(start, end, 1.0);
+    try std.testing.expectEqual(100, at_end.r);
+
+    const at_mid = interpolate(start, end, 0.5);
+    try std.testing.expectEqual(50, at_mid.r);
+}
+
+/// Linear interpolation across three colours
+pub fn interpolateThree(start: Colour, mid: Colour, end: Colour, t: f32) Colour {
+    const clamped = @max(0.0, @min(1.0, t));
+
+    if (clamped < 0.5) {
+        // First half: start to mid
+        return interpolate(start, mid, clamped * 2.0);
+    } else {
+        // Second half: mid to end
+        return interpolate(mid, end, (clamped - 0.5) * 2.0);
+    }
+}
+
+test "interpolateThree transitions correctly" {
+    const start = Colour{ .r = 0, .g = 0, .b = 0 };
+    const mid = Colour{ .r = 100, .g = 100, .b = 100 };
+    const end = Colour{ .r = 200, .g = 200, .b = 200 };
+
+    const at_start = interpolateThree(start, mid, end, 0.0);
+    try std.testing.expectEqual(0, at_start.r);
+
+    const at_mid = interpolateThree(start, mid, end, 0.5);
+    try std.testing.expectEqual(100, at_mid.r);
+
+    const at_end = interpolateThree(start, mid, end, 1.0);
+    try std.testing.expectEqual(200, at_end.r);
 }
 
 test "rainbow generates pastel colours" {
