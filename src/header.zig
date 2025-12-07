@@ -167,6 +167,89 @@ pub const ProgressHeader = struct {
     }
 };
 
+// Test helper for ProgressHeader
+fn expectProgressRender(
+    current_step: usize,
+    total_steps: usize,
+    title: []const u8,
+    config: Config,
+    expected: []const u8,
+) !void {
+    const allocator = std.testing.allocator;
+    const header = ProgressHeader.init(current_step, total_steps, title, config);
+
+    var output_buffer: [2048]u8 = undefined;
+    var output_writer = std.Io.Writer.fixed(&output_buffer);
+
+    try header.render(allocator, &output_writer);
+
+    const output = output_writer.buffered();
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
+test "ProgressHeader init" {
+    const config = Config{};
+    const header = ProgressHeader.init(0, 3, "Test", config);
+    try std.testing.expectEqual(0, header.current_step);
+    try std.testing.expectEqual(3, header.total_steps);
+    try std.testing.expectEqualStrings("Test", header.title);
+}
+
+test "ProgressHeader render - first step" {
+    try expectProgressRender(0, 3, "Initializing", Config{ .use_colour = false },
+        \\◉ ○ ○ ──────────────────────────────────────────── [ 1 / 3 ]
+        \\                        Initializing
+        \\────────────────────────────────────────────────────────────
+        \\
+    );
+}
+
+test "ProgressHeader render - middle step" {
+    try expectProgressRender(1, 3, "Building", Config{ .use_colour = false },
+        \\● ◉ ○ ──────────────────────────────────────────── [ 2 / 3 ]
+        \\                          Building
+        \\────────────────────────────────────────────────────────────
+        \\
+    );
+}
+
+test "ProgressHeader render - last step" {
+    try expectProgressRender(2, 3, "Complete", Config{ .use_colour = false },
+        \\● ● ◉ ──────────────────────────────────────────── [ 3 / 3 ]
+        \\                          Complete
+        \\────────────────────────────────────────────────────────────
+        \\
+    );
+}
+
+test "ProgressHeader render - custom width" {
+    try expectProgressRender(0, 2, "Test", Config{ .use_colour = false, .width = 40 },
+        \\◉ ○ ────────────────────────── [ 1 / 2 ]
+        \\                  Test
+        \\────────────────────────────────────────
+        \\
+    );
+}
+
+test "ProgressHeader render - custom width odd" {
+    try expectProgressRender(0, 2, "Odd", Config{ .use_colour = false, .width = 45 },
+        \\◉ ○ ─────────────────────────────── [ 1 / 2 ]
+        \\                     Odd
+        \\─────────────────────────────────────────────
+        \\
+    );
+}
+
+test "ProgressHeader render - all completed" {
+    try expectProgressRender(3, 3, "All Done", Config{ .use_colour = false },
+        \\● ● ● ──────────────────────────────────────────── [ 3 / 3 ]
+        \\                          All Done
+        \\────────────────────────────────────────────────────────────
+        \\
+    );
+}
+
 /// Starter header for single operations
 pub const StarterHeader = struct {
     title: []const u8,
@@ -258,89 +341,6 @@ fn renderCentredTitle(writer: *std.Io.Writer, title: []const u8, width: usize, t
     }
     try writer.writeAll(title);
     try writer.writeAll("\n");
-}
-
-// Test helper
-fn expectProgressRender(
-    current_step: usize,
-    total_steps: usize,
-    title: []const u8,
-    config: Config,
-    expected: []const u8,
-) !void {
-    const allocator = std.testing.allocator;
-    const header = ProgressHeader.init(current_step, total_steps, title, config);
-
-    var output_buffer: [2048]u8 = undefined;
-    var output_writer = std.Io.Writer.fixed(&output_buffer);
-
-    try header.render(allocator, &output_writer);
-
-    const output = output_writer.buffered();
-
-    try std.testing.expectEqualStrings(expected, output);
-}
-
-test "ProgressHeader init" {
-    const config = Config{};
-    const header = ProgressHeader.init(0, 3, "Test", config);
-    try std.testing.expectEqual(0, header.current_step);
-    try std.testing.expectEqual(3, header.total_steps);
-    try std.testing.expectEqualStrings("Test", header.title);
-}
-
-test "ProgressHeader render - first step" {
-    try expectProgressRender(0, 3, "Initializing", Config{ .use_colour = false },
-        \\◉ ○ ○ ──────────────────────────────────────────── [ 1 / 3 ]
-        \\                        Initializing
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - middle step" {
-    try expectProgressRender(1, 3, "Building", Config{ .use_colour = false },
-        \\● ◉ ○ ──────────────────────────────────────────── [ 2 / 3 ]
-        \\                          Building
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - last step" {
-    try expectProgressRender(2, 3, "Complete", Config{ .use_colour = false },
-        \\● ● ◉ ──────────────────────────────────────────── [ 3 / 3 ]
-        \\                          Complete
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - custom width" {
-    try expectProgressRender(0, 2, "Test", Config{ .use_colour = false, .width = 40 },
-        \\◉ ○ ────────────────────────── [ 1 / 2 ]
-        \\                  Test
-        \\────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - custom width odd" {
-    try expectProgressRender(0, 2, "Odd", Config{ .use_colour = false, .width = 45 },
-        \\◉ ○ ─────────────────────────────── [ 1 / 2 ]
-        \\                     Odd
-        \\─────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - all completed" {
-    try expectProgressRender(3, 3, "All Done", Config{ .use_colour = false },
-        \\● ● ● ──────────────────────────────────────────── [ 3 / 3 ]
-        \\                          All Done
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
 }
 
 // Test helper for StarterHeader
