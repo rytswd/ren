@@ -3,6 +3,8 @@
 
 const std = @import("std");
 const ren = @import("ren");
+const Colour = ren.colour.Colour;
+const header = ren.header;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -15,13 +17,23 @@ pub fn main() !void {
 
     try stdout.print("\n", .{});
 
-    // Demo title using StarterHeader
-    const title_config = ren.header.Config{ .width = null };
-    const title = ren.header.StarterHeader.init("ren (練) Demo", "sophisticated", title_config);
+    // ///----------------------------------------
+    // //  Title StarterHeader with gradient
+    // /------------------------------------------
+    const title_config = header.Config{
+        .width = null,
+        .separator_gradient = .{ .two_colour = .{
+            .start = Colour.hex("#FF8C00"),
+            .end = Colour.hex("#70B0F0"),
+        } },
+    };
+    const title = header.StarterHeader.init("ren (練) Demo", "sophisticated", title_config);
     try title.render(allocator, stdout);
     try stdout.print("\n", .{});
 
-    // Show detected width
+    // ///----------------------------------------
+    // //   Show detected width
+    // /------------------------------------------
     const term_width = ren.terminal.detectWidth();
     if (term_width) |w| {
         try stdout.print("  Terminal width: {} columns (auto-detected)\n", .{w});
@@ -30,61 +42,105 @@ pub fn main() !void {
     }
     try stdout.print("\n\n", .{});
 
-    // Demo: Default (ren) palette - all steps
+    // ///========================================
+    // //   ProgressHeader
+    // /==========================================
     try stdout.print("  ren palette (default):\n\n", .{});
-    const ren_config = ren.header.Config{};
+    const ren_config = header.Config{};
 
-    var demo = ren.header.ProgressHeader.init(0, 3, "Initializing", ren_config);
+    var demo = header.ProgressHeader.init(0, 3, "Initializing", ren_config);
     try demo.render(allocator, stdout);
     try stdout.print("\n", .{});
 
-    demo = ren.header.ProgressHeader.init(1, 3, "Building", ren_config);
+    demo = header.ProgressHeader.init(1, 3, "Building", ren_config);
     try demo.render(allocator, stdout);
     try stdout.print("\n", .{});
 
-    demo = ren.header.ProgressHeader.init(2, 3, "Complete", ren_config);
+    demo = header.ProgressHeader.init(2, 3, "Complete", ren_config);
     try demo.render(allocator, stdout);
     try stdout.print("\n", .{});
 
-    // Show all-completed state (current_step >= total_steps)
-    demo = ren.header.ProgressHeader.init(3, 3, "All Finished", ren_config);
+    demo = header.ProgressHeader.init(3, 3, "All Finished", ren_config);
     try demo.render(allocator, stdout);
     try stdout.print("\n\n", .{});
 
-    // Demo: Warm palette
+    // ///----------------------------------------
+    // //   Warm palette
+    // /------------------------------------------
     try stdout.print("  warm palette:\n\n", .{});
-    const warm_demo = ren.header.ProgressHeader.init(1, 3, "Warm Earth Tones", ren.header.Config{ .palette = ren.colour.warm });
+    const warm_demo = header.ProgressHeader.init(1, 3, "Warm Earth Tones", header.Config{ .palette = ren.colour.warm });
     try warm_demo.render(allocator, stdout);
     try stdout.print("\n\n", .{});
 
-    // Demo: Cool palette
+    // ///----------------------------------------
+    // //   Cool palette
+    // /------------------------------------------
     try stdout.print("  cool palette:\n\n", .{});
-    const cool_demo = ren.header.ProgressHeader.init(1, 3, "Cool Blues", ren.header.Config{ .palette = ren.colour.cool });
+    const cool_demo = header.ProgressHeader.init(1, 3, "Cool Blues", header.Config{ .palette = ren.colour.cool });
     try cool_demo.render(allocator, stdout);
     try stdout.print("\n\n", .{});
 
-    // Demo: Monochrome palette
+    // ///----------------------------------------
+    // //   Monochrome palette
+    // /------------------------------------------
     try stdout.print("  monochrome palette:\n\n", .{});
-    const mono_demo = ren.header.ProgressHeader.init(1, 3, "Greyscale", ren.header.Config{ .palette = ren.colour.monochrome });
+    const mono_demo = header.ProgressHeader.init(1, 3, "Greyscale", header.Config{ .palette = ren.colour.monochrome });
     try mono_demo.render(allocator, stdout);
     try stdout.print("\n\n", .{});
 
-    // Demo: StarterHeader with various options
+    // ///========================================
+    // //   StarterHeader
+    // /==========================================
     try stdout.print("  Starter headers:\n\n", .{});
 
-    const starter1 = ren.header.StarterHeader.init("Configuration", "ren", ren.header.Config{});
+    const starter1 = header.StarterHeader.init("Configuration", "ren", header.Config{});
     try starter1.render(allocator, stdout);
     try stdout.print("\n", .{});
 
-    const starter2 = ren.header.StarterHeader.init("Status", null, ren.header.Config{});
+    const starter2 = header.StarterHeader.init("Status", null, header.Config{});
     try starter2.render(allocator, stdout);
     try stdout.print("\n\n", .{});
 
-    // Demo: Rainbow separator
-    try stdout.print("  Rainbow separator:\n\n", .{});
-    const rainbow_config = ren.header.Config{ .use_rainbow = true };
+    // ///========================================
+    // //   Gradients
+    // /==========================================
+    try stdout.print("  Gradient examples:\n\n", .{});
+
     const sep_width = term_width orelse 60;
+
+    // ///----------------------------------------
+    // //   Rainbow
+    // /------------------------------------------
+    try stdout.print("  Rainbow:\n", .{});
+    const rainbow_config = header.Config{ .separator_gradient = .rainbow };
     try rainbow_config.renderSeparator(allocator, stdout, sep_width, 0, sep_width);
+    try stdout.print("\n\n", .{});
+
+    // ///----------------------------------------
+    // //   2 colour gradient
+    // /------------------------------------------
+    try stdout.print("  Mint to Sky:\n", .{});
+    const mint_sky = header.Config{
+        .separator_gradient = .{ .two_colour = .{
+            .start = Colour.hex("#9DF29D"),
+            .end = Colour.hex("#9D9DF2"),
+        } },
+    };
+    try mint_sky.renderSeparator(allocator, stdout, sep_width, 0, sep_width);
+    try stdout.print("\n\n", .{});
+
+    // ///----------------------------------------
+    // //   3 colour gradient
+    // /------------------------------------------
+    try stdout.print("  Peach → Mint → Lavender:\n", .{});
+    const three_grad = header.Config{
+        .separator_gradient = .{ .three_colour = .{
+            .start = Colour.hex("#FFDCD2"),
+            .mid = Colour.hex("#9DF29D"),
+            .end = Colour.hex("#E6DCFA"),
+        } },
+    };
+    try three_grad.renderSeparator(allocator, stdout, sep_width, 0, sep_width);
     try stdout.print("\n\n", .{});
 
     try stdout.flush();
