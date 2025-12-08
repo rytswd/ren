@@ -75,29 +75,90 @@ Top right label options:
 
 * Design Details
 
+** Design Decisions
+
+*** Progress Markers
+Current step uses distinct marker `◉` (fisheye) instead of same `●` as completed steps for better visual distinction.
+
+*** Gradient System
+Separator lines support multiple gradient types through union enum:
+- solid: Single colour
+- rainbow: Full spectrum pastel gradient (HSV-based)
+- two_colour: Smooth interpolation between two colours
+- three_colour: Three-point gradient with midpoint
+
+Gradients are position-aligned across full line width for vertical colour consistency between top and bottom separators.
+
+*** Hex Colour Support
+Comptime hex parsing for colour specification:
+- Supports 3-digit shorthand: `#FFF`, `ABC`
+- Supports 6-digit full: `#FF8040`, `A0B0C0`
+- Case insensitive
+- Zero runtime cost (parsed at compile time)
+
+*** Marker Organisation
+Progress markers (●, ◉, ○) and starter marker (⚝) are per-instance fields, not in Config. Allows different headers to use different marker styles while sharing Config.
+
+*** StarterHeader Implementation
+- Optional starter marker (default: `⚝`, can be customised or empty string)
+- Unicode width auto-calculated for any custom marker
+- Optional context displayed in brackets `[ context ]`
+- Supports all gradient types on separator lines
+- Same Config-based customisation as ProgressHeader
+
+*** Rendering Optimisation
+Gradient sequences use `writeNoReset()` to avoid redundant ANSI reset codes between characters. Single reset added at end of sequence for efficiency.
+
 ** Configurability
-Users must be able to customise:
-- Colour palette (support RGB/truecolor for modern terminals like Ghostty)
-- Default terminal width (default: 60 columns)
-- Characters used (dots, star, separators)
-- Colour mode (auto/always/never)
-- Spacing and padding
+Config struct provides:
+- separator_marker: Character/string for separators
+- width: Optional terminal width (null = auto-detect)
+- title_padding: Spacing for long titles
+- use_colour: Enable/disable colours
+- separator_gradient: Optional gradient for separators
+- palette: Colour palette (semantic Type-based colour roles)
 
-** Default Colour Palette
-Suggested defaults (fully user-configurable):
-- Progress completed: Refined green
-- Progress current: Warm amber/orange
-- Progress upcoming: Subtle grey
-- Star: Warm amber/orange
-- Separator lines: Subtle grey
-- Counter/context: Subtle grey
+** Colour and Gradient Support
 
-** Colour Support
-- Support truecolor (24-bit RGB) for modern terminals
-- Fallback to 256-colour palette when needed
-- Support ANSI 16-colour as baseline
-- Auto-detection or user override
-- Respect NO_COLOR environment variable
+*** Truecolor
+24-bit RGB support for modern terminals like Ghostty.
+
+*** Hex Colour Input
+Comptime parsing with `Colour.hex()`:
+- 3-digit shorthand: `#FFF`, `ABC` (expands F→FF)
+- 6-digit full: `#FF8040`, `A0B0C0`
+- Case insensitive
+- Zero runtime cost
+
+*** Gradient Types
+Union enum supporting:
+- solid: Single colour
+- rainbow: Full spectrum pastel (pink → peach → mint → sky → lavender)
+- two_colour: Linear interpolation between start and end
+- three_colour: Three-point gradient with midpoint
+
+Example usage:
+#+begin_src zig
+const grad = Gradient{ .two_colour = .{
+    .start = Colour.hex("#FF8C00"),
+    .end = Colour.hex("#70B0F0"),
+}};
+#+end_src
+
+*** Colour Palettes
+Semantic Type enum: neutral, primary, secondary, accent, subtle, info, warning
+
+Predefined palettes:
+- ren: Warm amber (primary), refined green (accent), subtle grey
+- warm: Earth tones
+- cool: Blues and cyans
+- monochrome: Greyscale
+
+User-definable custom palettes supported.
+
+*** TODO
+- 256-colour fallbacks
+- 16-colour fallbacks
 
 ** Terminal Width
 - Detect terminal width when available
