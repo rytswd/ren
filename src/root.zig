@@ -16,7 +16,10 @@ pub const version = std.SemanticVersion{
 pub const colour = @import("colour.zig");
 pub const terminal = @import("terminal.zig");
 pub const unicode = @import("unicode.zig");
+pub const block = @import("block.zig");
+pub const render = @import("render.zig");
 pub const header = @import("header.zig");
+pub const box = @import("box.zig");
 
 test "version is defined" {
     try std.testing.expect(version.major == 0);

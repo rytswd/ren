@@ -5,6 +5,7 @@ const std = @import("std");
 const ren = @import("ren");
 const Colour = ren.colour.Colour;
 const header = ren.header;
+const box = ren.box;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -142,6 +143,28 @@ pub fn main() !void {
     };
     try three_grad.renderSeparator(allocator, stdout, sep_width, 0, sep_width);
     try stdout.print("\n\n", .{});
+
+    // ///========================================
+    // //   Block-based architecture demo
+    // /==========================================
+    try stdout.print("  Block-based rendering:\n\n", .{});
+
+    // Layout configuration
+    const box_layout = box.Box{ .margin = 2, .padding = 3 };
+    const total_width = term_width orelse 60;
+
+    // Content layer: create header block at correct inner width
+    const block_header = header.ProgressHeader.init(1, 3, "Block Architecture", header.Config{});
+    const header_block = try block_header.toBlock(allocator, box_layout.innerWidth(total_width));
+    defer header_block.deinit(allocator);
+
+    // Layout layer: wrap with box
+    const boxed_block = try box_layout.wrap(allocator, header_block, total_width);
+    defer boxed_block.deinit(allocator);
+
+    // Render layer: output to terminal
+    try ren.render.render(stdout, boxed_block);
+    try stdout.print("\n", .{});
 
     try stdout.flush();
 }

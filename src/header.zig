@@ -6,6 +6,7 @@ const std = @import("std");
 const colour = @import("colour.zig");
 const terminal = @import("terminal.zig");
 const unicode = @import("unicode.zig");
+const Block = @import("block.zig").Block;
 
 /// Configuration for header appearance
 pub const Config = struct {
@@ -80,6 +81,9 @@ pub const Config = struct {
                 const t: f32 = @as(f32, @floatFromInt(offset + i)) / @as(f32, @floatFromInt(total_width));
                 const col = gradient.get(t);
                 try col.writeNoReset(allocator, writer, self.separator_marker);
+
+                try writer.flush();
+                std.posix.nanosleep(0, 3 * std.time.ns_per_ms);
             }
             try writer.writeAll(colour.reset);
         } else {
@@ -117,6 +121,135 @@ pub const ProgressHeader = struct {
             .total_steps = total_steps,
             .title = title,
             .config = config,
+        };
+    }
+
+    /// Produce a Block for this header (Content layer)
+    pub fn toBlock(self: ProgressHeader, allocator: std.mem.Allocator, width: usize) !Block {
+        var lines = try allocator.alloc(Block.Line, 3);
+        errdefer allocator.free(lines);
+
+        lines[0] = try self.buildProgressLine(allocator, width);
+        lines[1] = try self.buildTitleLine(allocator, width);
+        lines[2] = try self.buildBottomLine(allocator, width);
+
+        return .{
+            .lines = lines,
+            .width = width,
+            .height = 3,
+        };
+    }
+
+    fn buildProgressLine(self: ProgressHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
+        var line: std.ArrayList(u8) = .empty;
+        errdefer line.deinit(allocator);
+
+        const all_completed = self.current_step >= self.total_steps;
+
+        // Progress dots
+        for (0..self.total_steps) |i| {
+            const marker = if (all_completed or i < self.current_step)
+                self.completed_marker
+            else if (i == self.current_step)
+                self.current_marker
+            else
+                self.upcoming_marker;
+
+            const colour_type: colour.Type = if (all_completed or i < self.current_step)
+                .accent
+            else if (i == self.current_step)
+                .primary
+            else
+                .subtle;
+
+            if (self.config.use_colour) {
+                const col = self.config.palette.get(colour_type);
+                const ansi = try col.toAnsi(allocator);
+                defer allocator.free(ansi);
+                try line.appendSlice(allocator, ansi);
+                try line.appendSlice(allocator, marker);
+                try line.appendSlice(allocator, colour.reset);
+            } else {
+                try line.appendSlice(allocator, marker);
+            }
+            try line.append(allocator, ' ');
+        }
+
+        // Separator and counter
+        const dots_width = self.total_steps * 2;
+        const counter_num = if (self.current_step >= self.total_steps) self.total_steps else self.current_step + 1;
+        const counter = try std.fmt.allocPrint(allocator, "[ {} / {} ]", .{ counter_num, self.total_steps });
+        defer allocator.free(counter);
+        const separator_width = width - dots_width - counter.len - 1;
+
+        for (0..separator_width) |_| {
+            try line.appendSlice(allocator, self.config.separator_marker);
+        }
+
+        try line.append(allocator, ' ');
+
+        if (self.config.use_colour) {
+            const col = self.config.palette.get(.secondary);
+            const ansi = try col.toAnsi(allocator);
+            defer allocator.free(ansi);
+            try line.appendSlice(allocator, ansi);
+            try line.appendSlice(allocator, counter);
+            try line.appendSlice(allocator, colour.reset);
+        } else {
+            try line.appendSlice(allocator, counter);
+        }
+
+        return .{
+            .content = try line.toOwnedSlice(allocator),
+            .display_width = width,
+        };
+    }
+
+    fn buildTitleLine(self: ProgressHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
+        const padding = if (self.title.len < width)
+            (width - self.title.len) / 2
+        else
+            self.config.title_padding;
+
+        const spaces = try allocator.alloc(u8, padding);
+        defer allocator.free(spaces);
+        @memset(spaces, ' ');
+
+        const content = try std.fmt.allocPrint(allocator, "{s}{s}", .{
+            spaces,
+            self.title,
+        });
+
+        return .{
+            .content = content,
+            .display_width = padding + self.title.len,
+        };
+    }
+
+    fn buildBottomLine(self: ProgressHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
+        var line: std.ArrayList(u8) = .empty;
+        errdefer line.deinit(allocator);
+
+        if (self.config.use_colour and self.config.separator_gradient != null) {
+            const gradient = self.config.separator_gradient.?;
+            for (0..width) |i| {
+                const t: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(width));
+                const col = gradient.get(t);
+                const ansi = try col.toAnsi(allocator);
+                defer allocator.free(ansi);
+                try line.appendSlice(allocator, ansi);
+                try line.appendSlice(allocator, self.config.separator_marker);
+            }
+            try line.appendSlice(allocator, colour.reset);
+        } else {
+            for (0..width) |_| {
+                try line.appendSlice(allocator, self.config.separator_marker);
+            }
+        }
+
+        return .{
+            .content = try line.toOwnedSlice(allocator),
+            .display_width = width,
         };
     }
 
@@ -252,6 +385,29 @@ test "ProgressHeader render - all completed" {
     );
 }
 
+test "ProgressHeader toBlock - exact match" {
+    const allocator = std.testing.allocator;
+
+    const progress = ProgressHeader.init(1, 3, "Building", Config{ .use_colour = false });
+    const block = try progress.toBlock(allocator, 60);
+    defer block.deinit(allocator);
+
+    try std.testing.expectEqual(3, block.height);
+    try std.testing.expectEqual(60, block.width);
+
+    try std.testing.expectEqualStrings(
+        \\● ◉ ○ ──────────────────────────────────────────── [ 2 / 3 ]
+        , block.lines[0].content);
+
+    try std.testing.expectEqualStrings(
+        \\                          Building
+        , block.lines[1].content);
+
+    try std.testing.expectEqualStrings(
+        \\────────────────────────────────────────────────────────────
+        , block.lines[2].content);
+}
+
 /// Starter header for single operations
 pub const StarterHeader = struct {
     title: []const u8,
@@ -266,6 +422,148 @@ pub const StarterHeader = struct {
             .title = title,
             .context = context,
             .config = config,
+        };
+    }
+
+    /// Produce a Block for this header (Content layer)
+    pub fn toBlock(self: StarterHeader, allocator: std.mem.Allocator, width: usize) !Block {
+        var lines = try allocator.alloc(Block.Line, 3);
+        errdefer allocator.free(lines);
+
+        // Line 1: starter + separator + context
+        lines[0] = try self.buildTopLine(allocator, width);
+
+        // Line 2: centred title
+        lines[1] = try self.buildTitleLine(allocator, width);
+
+        // Line 3: full separator
+        lines[2] = try self.buildBottomLine(allocator, width);
+
+        return .{
+            .lines = lines,
+            .width = width,
+            .height = 3,
+        };
+    }
+
+    fn buildTopLine(self: StarterHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
+        var line: std.ArrayList(u8) = .empty;
+        errdefer line.deinit(allocator);
+
+        var used_width: usize = 0;
+
+        // Starter marker
+        if (self.starter_marker.len > 0) {
+            if (self.config.use_colour) {
+                const col = self.config.palette.get(.primary);
+                const ansi = try col.toAnsi(allocator);
+                defer allocator.free(ansi);
+                try line.appendSlice(allocator,ansi);
+                try line.appendSlice(allocator,self.starter_marker);
+                try line.appendSlice(allocator,colour.reset);
+            } else {
+                try line.appendSlice(allocator,self.starter_marker);
+            }
+            try line.append(allocator,' ');
+            used_width = unicode.displayWidth(self.starter_marker) + 1;
+        }
+
+        // Context text
+        const context_text = if (self.context) |ctx|
+            try std.fmt.allocPrint(allocator, "[ {s} ]", .{ctx})
+        else
+            try allocator.dupe(u8, "");
+        defer allocator.free(context_text);
+
+        // Separator
+        const separator_width = if (context_text.len > 0)
+            width - used_width - context_text.len - 1
+        else
+            width - used_width;
+
+        if (self.config.use_colour and self.config.separator_gradient != null) {
+            const gradient = self.config.separator_gradient.?;
+            for (0..separator_width) |i| {
+                const t: f32 = @as(f32, @floatFromInt(used_width + i)) / @as(f32, @floatFromInt(width));
+                const col = gradient.get(t);
+                const ansi = try col.toAnsi(allocator);
+                defer allocator.free(ansi);
+                try line.appendSlice(allocator,ansi);
+                try line.appendSlice(allocator,self.config.separator_marker);
+            }
+            try line.appendSlice(allocator,colour.reset);
+        } else {
+            for (0..separator_width) |_| {
+                try line.appendSlice(allocator,self.config.separator_marker);
+            }
+        }
+
+        // Context
+        if (context_text.len > 0) {
+            try line.append(allocator,' ');
+            if (self.config.use_colour) {
+                const col = self.config.palette.get(.secondary);
+                const ansi = try col.toAnsi(allocator);
+                defer allocator.free(ansi);
+                try line.appendSlice(allocator,ansi);
+                try line.appendSlice(allocator,context_text);
+                try line.appendSlice(allocator,colour.reset);
+            } else {
+                try line.appendSlice(allocator,context_text);
+            }
+        }
+
+        return .{
+            .content = try line.toOwnedSlice(allocator),
+            .display_width = width,
+        };
+    }
+
+    fn buildTitleLine(self: StarterHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
+        const padding = if (self.title.len < width)
+            (width - self.title.len) / 2
+        else
+            self.config.title_padding;
+
+        const spaces = try allocator.alloc(u8, padding);
+        defer allocator.free(spaces);
+        @memset(spaces, ' ');
+
+        const content = try std.fmt.allocPrint(allocator, "{s}{s}", .{
+            spaces,
+            self.title,
+        });
+
+        return .{
+            .content = content,
+            .display_width = padding + self.title.len,
+        };
+    }
+
+    fn buildBottomLine(self: StarterHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
+        var line: std.ArrayList(u8) = .empty;
+        errdefer line.deinit(allocator);
+
+        if (self.config.use_colour and self.config.separator_gradient != null) {
+            const gradient = self.config.separator_gradient.?;
+            for (0..width) |i| {
+                const t: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(width));
+                const col = gradient.get(t);
+                const ansi = try col.toAnsi(allocator);
+                defer allocator.free(ansi);
+                try line.appendSlice(allocator,ansi);
+                try line.appendSlice(allocator,self.config.separator_marker);
+            }
+            try line.appendSlice(allocator,colour.reset);
+        } else {
+            for (0..width) |_| {
+                try line.appendSlice(allocator,self.config.separator_marker);
+            }
+        }
+
+        return .{
+            .content = try line.toOwnedSlice(allocator),
+            .display_width = width,
         };
     }
 
@@ -442,6 +740,29 @@ test "StarterHeader with empty starter_marker" {
     ;
 
     try std.testing.expectEqualStrings(expected, output);
+}
+
+test "StarterHeader toBlock - exact match" {
+    const allocator = std.testing.allocator;
+
+    const starter = StarterHeader.init("Configuration", "ren", Config{ .use_colour = false });
+    const block = try starter.toBlock(allocator, 60);
+    defer block.deinit(allocator);
+
+    try std.testing.expectEqual(3, block.height);
+    try std.testing.expectEqual(60, block.width);
+
+    try std.testing.expectEqualStrings(
+        \\⚝ ────────────────────────────────────────────────── [ ren ]
+        , block.lines[0].content);
+
+    try std.testing.expectEqualStrings(
+        \\                       Configuration
+        , block.lines[1].content);
+
+    try std.testing.expectEqualStrings(
+        \\────────────────────────────────────────────────────────────
+        , block.lines[2].content);
 }
 
 test "StarterHeader with custom starter_marker" {
