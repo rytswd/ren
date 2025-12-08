@@ -1,6 +1,6 @@
 #+title: Box Printer
-#+state: draft
-#+FILETAGS: :box:feature:
+#+state: ready
+#+FILETAGS: :box:feature:layout:
 
 * Summary
 Implement sophisticated box drawing utilities for terminal output with multiple styles: left-bordered boxes for vertical flow, full rectangular boxes for emphasis, and various border character sets. Support content alignment within boxes and box positioning on screen.
@@ -443,6 +443,19 @@ Use emoji for corners and decorations:
 
 Eye-catching but breaks in many terminals and not accessible.
 
+* Architecture Integration
+Box printer is a **Layout** component in the three-layer architecture:
+
+- Receives Block from Content layer
+- Transforms Block by wrapping with borders, padding, margin
+- Returns new Block for Render layer
+
+Key functions:
+- ~innerWidth(total_width)~ - calculate available width for content
+- ~wrap(allocator, inner_block, total_width)~ - wrap content with box borders
+
+See [[file:block-based-rendering.org][Block-Based Architecture]] for full specification.
+
 * Infrastructure Needed
 All implementable with Zig stdlib - no external dependencies:
 - Unicode width calculation
@@ -451,6 +464,7 @@ All implementable with Zig stdlib - no external dependencies:
 - Text alignment and padding utilities
 
 * History
+- 2025-12-10: Added architecture integration section
 - 2025-12-04: Initial draft created
 
 * References

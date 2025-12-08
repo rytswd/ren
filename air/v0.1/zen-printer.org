@@ -1,6 +1,6 @@
 #+title: Zen Printer
-#+state: draft
-#+FILETAGS: :zen:feature:
+#+state: ready
+#+FILETAGS: :zen:feature:layout:
 
 * Summary
 Implement the epitome of sophisticated terminal output through extreme minimalism and generous spacing. Zen printer focuses on restraint, breathing room, and subtle visual elements that guide rather than contain.
@@ -389,6 +389,18 @@ Just use indentation without any visual elements:
 - Loses subtle guidance
 - No visual anchors
 
+* Architecture Integration
+Zen printer is a **Layout** component in the three-layer architecture:
+
+- Receives Block from Content layer
+- Transforms Block by adding spacing, indentation, subtle separators
+- Returns new Block for Render layer
+
+Key functions:
+- ~wrap(allocator, inner_block)~ - wrap content with zen spacing
+
+See [[file:block-based-rendering.org][Block-Based Architecture]] for full specification.
+
 * Infrastructure Needed
 All implementable with Zig stdlib - no external dependencies:
 - Unicode width calculation for alignment
@@ -397,6 +409,7 @@ All implementable with Zig stdlib - no external dependencies:
 - Text alignment and padding utilities
 
 * History
+- 2025-12-10: Added architecture integration section, marked ready
 - 2025-12-04: Initial draft created
 
 * References

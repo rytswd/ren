@@ -1,0 +1,704 @@
+#+title: Block-Based Architecture: Content, Layout, Render
+#+state: ready
+#+FILETAGS: :architecture:refactor:box:header:
+
+* Summary
+Introduce a block-based architecture with three distinct layers: **Content**, **Layout**, and **Render**. Content produces Blocks (standalone items like headers, separators, text). Layout transforms Blocks (boxing, spacing, columns). Render outputs Blocks to the terminal with optional animation effects. Each layer has a single responsibility and clear interface.
+
+* Motivation
+The current implementation mixes content generation and I/O output within individual modules. Headers and boxes each contain rendering logic, making composition difficult. When nesting content (e.g., a header inside a box), the inner component needs to know about the outer component's constraints (available width, line prefixes for borders).
+
+This coupling creates several problems:
+- **Composition complexity**: Nesting requires passing writer, allocator, and layout context through all layers
+- **Testing difficulty**: Testing content requires mocking I/O
+- **Animation limitations**: Re-rendering requires rebuilding and re-outputting everything
+- **Code duplication**: Each component implements similar output patterns
+
+A three-layer architecture addresses these by establishing clear boundaries:
+
+| Layer   | Responsibility                    | Dependencies      |
+|---------+-----------------------------------+-------------------|
+| Content | Produce Block from data           | allocator         |
+| Layout  | Transform Block (add structure)   | allocator         |
+| Render  | Output Block to terminal          | writer, allocator |
+
+** Goals
+- Clean separation: Content (allocator) / Layout (allocator) / Render (writer + allocator)
+- Composable: Layout wrapping Content, nested layouts
+- Animation-ready: Render layer handles effects without Content/Layout awareness
+- Testable: Content and Layout testable without I/O mocking
+- Simple mental model: Block flows through layers
+
+** Non-Goals
+- Streaming output (building partial content while writing)
+- Infinite/unbounded content rendering
+- Complex scene graph or retained mode UI
+- Interactive terminal UI (cursor input, selection)
+
+* Proposal
+
+** Core Type: Block
+A Block represents rendered content as an array of lines with metadata:
+
+#+begin_src zig
+// ===== block.zig =====
+pub const Block = struct {
+    lines: []Line,
+    width: usize,      // widest line's display width
+    height: usize,     // number of lines
+
+    pub const Line = struct {
+        content: []const u8,     // the actual bytes
+        display_width: usize,    // visual width (Unicode-aware)
+    };
+
+    pub fn deinit(self: Block, allocator: std.mem.Allocator) void {
+        for (self.lines) |line| {
+            allocator.free(line.content);
+        }
+        allocator.free(self.lines);
+    }
+};
+#+end_src
+
+Key properties:
+- Immutable once created (transform by creating new Block)
+- Owns its memory (caller responsible for deinit)
+- Pre-calculated display widths for efficient layout
+- Height is simply line count
+
+** Content Layer
+Content modules produce standalone Blocks from data. They only need allocators - no I/O.
+
+Content includes: headers, separators, text blocks, tables, lists - anything that can exist independently.
+
+#+begin_src zig
+// ===== header.zig =====
+pub const ProgressHeader = struct {
+    current_step: usize,
+    total_steps: usize,
+    title: []const u8,
+    config: Config,
+
+    /// Produce a Block for this header at the given width
+    pub fn toBlock(self: ProgressHeader, allocator: std.mem.Allocator, width: usize) !Block {
+        var lines = try allocator.alloc(Block.Line, 3);
+        errdefer allocator.free(lines);
+
+        // Line 1: progress dots + separator + counter
+        // e.g., "● ◉ ○ ──────────────────────── [ 2 / 3 ]"
+        lines[0] = try self.buildProgressLine(allocator, width);
+
+        // Line 2: centred title
+        lines[1] = try self.buildTitleLine(allocator, width);
+
+        // Line 3: full separator
+        lines[2] = try self.buildSeparatorLine(allocator, width);
+
+        return Block{
+            .lines = lines,
+            .width = width,
+            .height = 3,
+        };
+    }
+};
+
+pub const StarterHeader = struct {
+    title: []const u8,
+    context: ?[]const u8,
+    config: Config,
+
+    pub fn toBlock(self: StarterHeader, allocator: std.mem.Allocator, width: usize) !Block {
+        // Similar pattern: build lines, return Block
+    }
+};
+#+end_src
+
+** Layout Layer
+Layout modules transform Blocks by adding visual structure. They only need allocators - no I/O.
+
+Layout includes: box (borders, padding), zen (breathing room, spacing), columns (multi-column), indent (nesting) - anything that changes how content is arranged or framed.
+
+#+begin_src zig
+// ===== box.zig =====
+pub const Box = struct {
+    margin: usize = 0,
+    padding: usize = 2,
+    border: BorderChars = rounded,
+
+    /// Calculate inner width available for content
+    pub fn innerWidth(self: Box, total_width: usize) usize {
+        // total - (margin + border + padding) on each side
+        return total_width - (self.margin + 1 + self.padding) * 2;
+    }
+
+    /// Wrap a Block with box borders
+    pub fn wrap(self: Box, allocator: std.mem.Allocator, inner: Block, total_width: usize) !Block {
+        const inner_w = self.innerWidth(total_width);
+        const new_height = inner.height + 2; // +2 for top and bottom borders
+
+        var lines = try allocator.alloc(Block.Line, new_height);
+        errdefer allocator.free(lines);
+
+        // Top border: ╭────────────────────────╮
+        lines[0] = try self.buildTopBorder(allocator, total_width);
+
+        // Wrap each inner line: │  content  │
+        for (inner.lines, 0..) |inner_line, i| {
+            lines[i + 1] = try self.wrapLine(allocator, inner_line, inner_w, total_width);
+        }
+
+        // Bottom border: ╰────────────────────────╯
+        lines[new_height - 1] = try self.buildBottomBorder(allocator, total_width);
+
+        return Block{
+            .lines = lines,
+            .width = total_width,
+            .height = new_height,
+        };
+    }
+
+    fn wrapLine(
+        self: Box,
+        allocator: std.mem.Allocator,
+        inner_line: Block.Line,
+        inner_width: usize,
+        total_width: usize,
+    ) !Block.Line {
+        // Build: margin + border + padding + content + pad_to_width + padding + border + margin
+        const margin_str = try allocator.alloc(u8, self.margin);
+        @memset(margin_str, ' ');
+        defer allocator.free(margin_str);
+
+        const padding_str = try allocator.alloc(u8, self.padding);
+        @memset(padding_str, ' ');
+        defer allocator.free(padding_str);
+
+        // Calculate right padding to fill width
+        const content_pad = inner_width - inner_line.display_width;
+        const right_pad = try allocator.alloc(u8, content_pad);
+        @memset(right_pad, ' ');
+        defer allocator.free(right_pad);
+
+        const content = try std.fmt.allocPrint(allocator, "{s}{s}{s}{s}{s}{s}{s}{s}", .{
+            margin_str,
+            self.border.vertical,
+            padding_str,
+            inner_line.content,
+            right_pad,
+            padding_str,
+            self.border.vertical,
+            margin_str,
+        });
+
+        return Block.Line{
+            .content = content,
+            .display_width = total_width,
+        };
+    }
+};
+#+end_src
+
+** Render Layer
+The render module outputs Blocks to the terminal. It needs writers, and allocator for animation effects that rebuild styled blocks.
+
+Render includes: instant output, animated effects (fade-in, typewriter, glow). Animation is handled entirely in this layer - Content and Layout are unaware of it.
+
+#+begin_src zig
+// ===== render.zig =====
+
+/// Instant render - output all lines immediately
+pub fn render(writer: *std.Io.Writer, block: Block) !void {
+    for (block.lines) |line| {
+        try writer.writeAll(line.content);
+        try writer.writeAll("\n");
+    }
+}
+
+/// Fade in - reserve space, then reveal with increasing opacity
+pub fn fadeIn(
+    writer: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    block: Block,
+    config: FadeConfig,
+) !void {
+    // 1. Reserve space (blank lines)
+    try reserveSpace(writer, block.height);
+
+    // 2. Animate: rewind and re-render with increasing opacity
+    for (0..config.steps) |step| {
+        try cursorUp(writer, block.height);
+        const opacity = @as(f32, @floatFromInt(step + 1)) / @as(f32, @floatFromInt(config.steps));
+        try renderWithOpacity(writer, allocator, block, opacity);
+        try writer.flush();
+        std.posix.nanosleep(0, config.step_delay_ns);
+    }
+}
+
+/// Typewriter - reveal characters progressively
+pub fn typewriter(
+    writer: *std.Io.Writer,
+    block: Block,
+    config: TypewriterConfig,
+) !void {
+    // Character-by-character reveal with cursor positioning
+    // See animation-support.org for full specification
+}
+
+// Cursor control helpers
+fn cursorUp(writer: *std.Io.Writer, lines: usize) !void {
+    try writer.print("\x1b[{d}F", .{lines});
+}
+
+fn reserveSpace(writer: *std.Io.Writer, lines: usize) !void {
+    for (0..lines) |_| try writer.writeAll("\n");
+}
+#+end_src
+
+Animation effects are detailed in the separate [[file:animation-support.org][Animation Support]] specification.
+
+** Layout Example: Zen
+Zen provides minimal layout with breathing room:
+
+#+begin_src zig
+// ===== zen.zig =====
+pub const Zen = struct {
+    top_padding: usize = 1,
+    bottom_padding: usize = 1,
+    left_indent: usize = 2,
+
+    /// Wrap content with spacing
+    pub fn wrap(self: Zen, allocator: std.mem.Allocator, inner: Block) !Block {
+        const new_height = inner.height + self.top_padding + self.bottom_padding;
+        var lines = try allocator.alloc(Block.Line, new_height);
+        errdefer allocator.free(lines);
+
+        // Top padding: empty lines
+        for (0..self.top_padding) |i| {
+            lines[i] = Block.Line{ .content = "", .display_width = 0 };
+        }
+
+        // Indented content
+        const indent = try allocator.alloc(u8, self.left_indent);
+        @memset(indent, ' ');
+
+        for (inner.lines, 0..) |inner_line, i| {
+            const content = try std.fmt.allocPrint(allocator, "{s}{s}", .{
+                indent,
+                inner_line.content,
+            });
+            lines[self.top_padding + i] = Block.Line{
+                .content = content,
+                .display_width = self.left_indent + inner_line.display_width,
+            };
+        }
+        allocator.free(indent);
+
+        // Bottom padding: empty lines
+        for (0..self.bottom_padding) |i| {
+            const idx = self.top_padding + inner.height + i;
+            lines[idx] = Block.Line{ .content = "", .display_width = 0 };
+        }
+
+        return Block{
+            .lines = lines,
+            .width = self.left_indent + inner.width,
+            .height = new_height,
+        };
+    }
+};
+#+end_src
+
+* Design Details
+
+** Composition Pattern
+Blocks flow through the three layers:
+
+#+begin_src zig
+// Content → Layout → Render
+const header_block = try header.toBlock(allocator, box.innerWidth(80));  // Content
+defer header_block.deinit(allocator);
+
+const boxed = try box.wrap(allocator, header_block, 80);                  // Layout
+defer boxed.deinit(allocator);
+
+try ren.render.render(&writer, boxed);                                    // Render
+#+end_src
+
+#+begin_src zig
+// Content → Layout → Layout → Render (nested layouts)
+const header_block = try header.toBlock(allocator, box.innerWidth(zen_width));
+defer header_block.deinit(allocator);
+
+const boxed = try box.wrap(allocator, header_block, zen_width);
+defer boxed.deinit(allocator);
+
+const spaced = try zen.wrap(allocator, boxed);
+defer spaced.deinit(allocator);
+
+try ren.render.fadeIn(&writer, allocator, spaced, .{});  // Animated render
+#+end_src
+
+** Memory Management
+Each layer transformation creates a new Block. Caller manages lifetimes with defer:
+
+#+begin_src zig
+// Content layer
+const content_block = try header.toBlock(allocator, width);
+defer content_block.deinit(allocator);
+
+// Layout layer
+const layout_block = try box.wrap(allocator, content_block, total_width);
+defer layout_block.deinit(allocator);
+
+// Render layer
+try ren.render.render(&writer, layout_block);
+// Both blocks freed when scope exits
+#+end_src
+
+For progress updates, rebuild blocks each iteration:
+
+#+begin_src zig
+for (0..total_steps) |step| {
+    const header = ProgressHeader.init(step, total_steps, titles[step], config);
+
+    const inner = try header.toBlock(allocator, box.innerWidth(80));
+    defer inner.deinit(allocator);
+
+    const outer = try box.wrap(allocator, inner, 80);
+    defer outer.deinit(allocator);
+
+    // Use cursor control for updates (see animation-support.org)
+    if (step > 0) try ren.render.cursorUp(&writer, outer.height);
+    try ren.render.render(&writer, outer);
+    try writer.flush();
+
+    std.posix.nanosleep(0, 500 * std.time.ns_per_ms);
+}
+#+end_src
+
+** Width Calculation Flow
+Width flows top-down through layout:
+
+#+begin_example
+Terminal Width: 80
+        │
+        ▼
+    Box (margin=2, padding=4, border=1)
+        │
+        │  innerWidth = 80 - (2+1+4)*2 = 66
+        │
+        ▼
+    Header receives width=66
+        │
+        │  toBlock(allocator, 66)
+        │
+        ▼
+    Block { width: 66, height: 3 }
+        │
+        │  box.wrap(allocator, block, 80)
+        │
+        ▼
+    Block { width: 80, height: 5 }
+#+end_example
+
+** Animation (Render Layer Responsibility)
+Animation is handled entirely in the Render layer. Content and Layout are unaware of animation - they just produce Blocks.
+
+The Render layer provides:
+- **Instant**: ~render(writer, block)~ - output immediately
+- **Fade-in**: ~fadeIn(writer, allocator, block, config)~ - space-reserving fade
+- **Typewriter**: ~typewriter(writer, block, config)~ - character-by-character reveal
+- **Glow**: ~glow(writer, allocator, block, config)~ - border illumination effect
+
+All animation functions follow the space-reserving pattern:
+1. Reserve full height with blank/invisible content
+2. Rewind cursor to start of reserved space
+3. Re-render with progressive visibility
+4. No line jumps during animation
+
+See [[file:animation-support.org][Animation Support]] for detailed specification.
+
+** Testing Strategy
+Each layer is independently testable:
+
+#+begin_src zig
+// Test content (no I/O needed)
+test "ProgressHeader toBlock" {
+    const allocator = std.testing.allocator;
+    const header = ProgressHeader.init(1, 3, "Test", .{});
+
+    const block = try header.toBlock(allocator, 60);
+    defer block.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 3), block.height);
+    try std.testing.expectEqual(@as(usize, 60), block.width);
+    // Check line contents...
+}
+
+// Test layout (no I/O needed)
+test "Box wrap" {
+    const allocator = std.testing.allocator;
+    const box = Box{ .padding = 2 };
+
+    var inner_lines = [_]Block.Line{
+        .{ .content = "Hello", .display_width = 5 },
+    };
+    const inner = Block{ .lines = &inner_lines, .width = 5, .height = 1 };
+
+    const outer = try box.wrap(allocator, inner, 20);
+    defer outer.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 3), outer.height); // +2 for borders
+}
+
+// Test render (mock writer or fixed buffer)
+test "render outputs block" {
+    var buffer: [1024]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buffer);
+
+    // ... create block ...
+    try ren.render.render(&writer, block);
+
+    const output = writer.buffered();
+    // Check output contents...
+}
+#+end_src
+
+* Examples
+
+** Example 1: Simple Header in Box
+
+#+begin_src zig
+const std = @import("std");
+const ren = @import("ren");
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const stdout = std.io.getStdOut();
+    var buf: [4096]u8 = undefined;
+    var writer = std.Io.Writer.init(stdout, &buf);
+
+    // Configure
+    const box = ren.box.Box{ .margin = 2, .padding = 4 };
+    const header = ren.header.ProgressHeader.init(1, 3, "Building", .{});
+    const width: usize = 80;
+
+    // Build blocks
+    const header_block = try header.toBlock(allocator, box.innerWidth(width));
+    defer header_block.deinit(allocator);
+
+    const boxed = try box.wrap(allocator, header_block, width);
+    defer boxed.deinit(allocator);
+
+    // Render (instant)
+    try ren.render.render(&writer, boxed);
+    try writer.flush();
+
+    // Or with animation
+    // try ren.render.fadeIn(&writer, allocator, boxed, .{});
+}
+#+end_src
+
+Output:
+#+begin_example
+  ╭────────────────────────────────────────────────────────────────────────╮
+  │    ● ◉ ○ ──────────────────────────────────────────────── [ 2 / 3 ]    │
+  │                              Building                                  │
+  │    ────────────────────────────────────────────────────────────────    │
+  ╰────────────────────────────────────────────────────────────────────────╯
+#+end_example
+
+** Example 2: Animated Fade-In
+
+#+begin_src zig
+pub fn main() !void {
+    // ... setup ...
+
+    const box = ren.box.Box{ .padding = 4 };
+    const header = ren.header.ProgressHeader.init(0, 3, "Starting", .{});
+    const width: usize = 60;
+
+    // Content layer
+    const inner = try header.toBlock(allocator, box.innerWidth(width));
+    defer inner.deinit(allocator);
+
+    // Layout layer
+    const outer = try box.wrap(allocator, inner, width);
+    defer outer.deinit(allocator);
+
+    // Render layer with animation
+    try ren.render.fadeIn(&writer, allocator, outer, .{
+        .steps = 10,
+        .step_delay_ns = 30 * std.time.ns_per_ms,
+    });
+}
+#+end_src
+
+** Example 3: Nested Boxes
+
+#+begin_src zig
+pub fn main() !void {
+    // ... setup ...
+
+    const outer_box = ren.box.Box{ .padding = 2, .border = ren.box.rounded };
+    const inner_box = ren.box.Box{ .padding = 1, .border = ren.box.single };
+    const width: usize = 60;
+
+    // Build text block manually
+    var text_lines = try allocator.alloc(ren.block.Block.Line, 3);
+    text_lines[0] = .{ .content = try allocator.dupe(u8, "Database: PostgreSQL"), .display_width = 20 };
+    text_lines[1] = .{ .content = try allocator.dupe(u8, "Port: 5432"), .display_width = 10 };
+    text_lines[2] = .{ .content = try allocator.dupe(u8, "SSL: enabled"), .display_width = 12 };
+
+    const text_block = ren.block.Block{ .lines = text_lines, .width = 20, .height = 3 };
+    defer text_block.deinit(allocator);
+
+    // Nest: text -> inner box -> outer box
+    const inner_boxed = try inner_box.wrap(allocator, text_block, outer_box.innerWidth(width));
+    defer inner_boxed.deinit(allocator);
+
+    const outer_boxed = try outer_box.wrap(allocator, inner_boxed, width);
+    defer outer_boxed.deinit(allocator);
+
+    // Render
+    try ren.render.render(&writer, outer_boxed);
+}
+#+end_src
+
+Output:
+#+begin_example
+╭────────────────────────────────────────────────────────╮
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ Database: PostgreSQL                             │  │
+│  │ Port: 5432                                       │  │
+│  │ SSL: enabled                                     │  │
+│  └──────────────────────────────────────────────────┘  │
+╰────────────────────────────────────────────────────────╯
+#+end_example
+
+** Example 4: Zen Spacing
+
+#+begin_src zig
+pub fn main() !void {
+    // ... setup ...
+
+    const zen = ren.zen.Zen{ .top_padding = 2, .bottom_padding = 1, .left_indent = 4 };
+    const header = ren.header.StarterHeader.init("Welcome", "ren", .{});
+
+    const header_block = try header.toBlock(allocator, 56);  // 60 - 4 indent
+    defer header_block.deinit(allocator);
+
+    const spaced = try zen.wrap(allocator, header_block);
+    defer spaced.deinit(allocator);
+
+    // Render
+    try ren.render.render(&writer, spaced);
+}
+#+end_src
+
+Output:
+#+begin_example
+
+
+    ⚝ ──────────────────────────────────────────── [ ren ]
+                         Welcome
+    ────────────────────────────────────────────────────
+
+#+end_example
+
+* Drawbacks
+- **Memory overhead**: Each transformation allocates a new Block; cannot stream output while building
+- **Two-pass rendering**: Must build entire Block before any output (cannot show partial progress during build)
+- **Allocation patterns**: Many small allocations for lines; could use arena allocator to mitigate
+- **API change**: Existing code using direct render methods needs migration
+
+* Alternatives
+
+** Keep Current Approach (Direct Writer)
+Continue passing writer through all components.
+
+Pros: No memory overhead, streaming possible
+Cons: Composition requires complex context passing, hard to test
+
+** Writer Wrapper for Nesting
+Create wrapper writers that intercept newlines and add prefixes.
+
+#+begin_src zig
+pub const PrefixedWriter = struct {
+    inner: *std.Io.Writer,
+    prefix: []const u8,
+    at_line_start: bool = true,
+
+    pub fn writeByte(self: *PrefixedWriter, byte: u8) !void {
+        if (self.at_line_start) {
+            try self.inner.writeAll(self.prefix);
+            self.at_line_start = false;
+        }
+        if (byte == '\n') {
+            self.at_line_start = true;
+        }
+        try self.inner.writeByte(byte);
+    }
+};
+#+end_src
+
+Pros: Streaming, content unaware of nesting
+Cons: Byte-by-byte overhead, width padding complex, harder to track line count for cursor control
+
+** Region-Based Streaming
+Pass Region struct with geometry and line-writing methods.
+
+#+begin_src zig
+pub const Region = struct {
+    available_width: usize,
+    line_prefix: []const u8,
+    lines_rendered: usize = 0,
+
+    pub fn writeLine(self: *Region, writer: *std.Io.Writer, content: []const u8) !void {
+        try writer.writeAll(self.line_prefix);
+        try writer.writeAll(content);
+        // ... padding ...
+        self.lines_rendered += 1;
+    }
+};
+#+end_src
+
+Pros: Streaming possible, explicit line boundaries
+Cons: Content must use Region API (not plain writes), mixed concerns (geometry + I/O)
+
+** Hybrid: Block + Streaming Option
+Provide both toBlock() and renderInto(region) on content.
+
+Pros: Flexibility for different use cases
+Cons: API complexity, two code paths to maintain
+
+* Infrastructure Needed
+All implementable with Zig stdlib:
+- Block type and utilities (new)
+- Render module with cursor control (new)
+- Update existing header.zig to add toBlock()
+- Update existing box.zig to add wrap()
+- Update zen.zig to add wrap()
+- ANSI escape codes for cursor movement (standard)
+
+* Migration Path
+1. Add block.zig with Block type
+2. Add render.zig with Renderer
+3. Add toBlock() methods to header types (alongside existing render)
+4. Add wrap() methods to box/zen (alongside existing)
+5. Update examples to use new pattern
+6. Deprecate direct render methods
+7. Remove deprecated methods in future version
+
+* History
+- 2025-12-10: Refined three-layer terminology (Content/Layout/Render), added animation references
+- 2025-12-09: Initial draft created from architecture discussion
+
+* References
+- ANSI Escape Codes: https://en.wikipedia.org/wiki/ANSI_escape_code
+- Cursor control sequences: CSI n F (CPL - Cursor Previous Line)
+- Zig memory management: https://ziglang.org/documentation/master/#Memory

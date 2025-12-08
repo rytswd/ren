@@ -198,6 +198,20 @@ Use more elaborate Unicode characters with rounded corners `╭╮╰╯` - beau
 ** No Headers
 Let users compose headers entirely from primitives - maximum flexibility but requires more user code.
 
+* Architecture Integration
+Header is a **Content** component in the three-layer architecture:
+
+- Produces Block from header configuration
+- Block can be passed to Layout layer (box, zen) for framing
+- Final Block passed to Render layer for output (with optional animation)
+
+Key functions:
+- ~toBlock(allocator, width)~ - produce Block for this header
+
+Existing ~render()~ methods will be deprecated in favour of the Block-based approach.
+
+See [[file:block-based-rendering.org][Block-Based Architecture]] for full specification.
+
 * Infrastructure Needed
 Implemented with Zig stdlib (zero external dependencies):
 - ✓ Terminal width detection (POSIX ioctl with /dev/tty)
@@ -208,8 +222,9 @@ Implemented with Zig stdlib (zero external dependencies):
 - ⚠ 256-colour and 16-colour fallbacks (TODO)
 
 * History
+- 2025-12-10: Added architecture integration section, migration to Block-based approach
 - 2025-12-04: Initial draft created
-- 2025-12-07: Implementation completed
+- 2025-12-07: Implementation completed (direct render approach)
   - ProgressHeader with all states including all-completed
   - StarterHeader with customisable markers
   - Truecolor support with four predefined palettes

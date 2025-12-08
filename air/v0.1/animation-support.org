@@ -1,0 +1,241 @@
+#+title: Animation Support
+#+state: ready
+#+FILETAGS: :animation:feature:render:
+
+* Summary
+Define animation capabilities for the Render layer. All animations follow a space-reserving pattern: reserve full height first, then animate in place without line jumps. Effects are categorised as **frame effects** (glow, expand - for borders/separators) and **content effects** (fade-in, typewriter). Frame and content effects can be combined.
+
+* Motivation
+Static output lacks the refinement of modern CLI tools. For a library named after 洗練 (sophistication), animation is essential. Terminal animation has constraints:
+- No true graphics - only characters and ANSI codes
+- Cursor-based positioning
+- Line-buffered output by default
+- Must degrade gracefully when not a TTY
+
+** Goals
+- Space-reserving animations (no line jumps)
+- Frame effects: glow (border illumination), expand (progressive draw)
+- Content effects: fade-in (opacity), typewriter (character reveal)
+- Combinable: frame + content effects can run together
+- Graceful degradation for non-TTY output
+- No allocator/writer stored in structs
+- Consistent flush behaviour (caller controls flush)
+
+** Non-Goals
+- Full TUI framework (interactive input, scrolling)
+- Complex easing functions (linear sufficient for v0.1)
+- Frame-rate locked render loop (caller controls timing)
+
+* Proposal
+
+** Core Principle: Space-Reserving Animation
+All animations reserve space first, then animate in place:
+
+#+begin_example
+1. Reserve       2. Animate frame    3. Animate content   4. Final
+
+(blank lines)    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+                 │             │     │  ░░░░░░░░░  │     │  Hello      │
+                 │             │     │             │     │  World      │
+                 └─────────────┘     └─────────────┘     └─────────────┘
+#+end_example
+
+Pattern:
+1. Reserve full block height (blank lines)
+2. Rewind cursor to start
+3. Render frames with progressive effects
+4. Caller controls flush timing
+
+This ensures terminal height is stable - no line jumps during animation.
+
+** Effect Categories
+
+*** Frame Effects (borders/separators only)
+Applied to border characters and separator lines. Independent of content.
+
+**** Glow
+Border illuminates from dim to bright, or transitions between colours.
+- Configurable: start/end colours, steps, timing
+- Content remains invisible during glow (or can be combined with content effect)
+
+**** Expand (future)
+Border draws progressively: top → sides → bottom.
+- Creates illusion of box being drawn
+
+*** Content Effects
+Applied to content within frames.
+
+**** Fade-In
+Content opacity increases over steps (dim → full brightness).
+- Configurable: steps, timing
+- Implementation: ANSI dim attribute or colour interpolation
+
+**** Typewriter
+Characters reveal one at a time within each line.
+- Configurable: character delay, line delay
+- Requires frequent flush for each character
+- Frame can render instantly while content typewriters
+
+** Combining Effects
+Frame and content effects are independent and can combine:
+
+| Frame Effect | Content Effect | Result                              |
+|--------------+----------------+-------------------------------------|
+| none         | fade-in        | Border instant, content fades       |
+| glow         | none           | Border glows, content instant after |
+| glow         | fade-in        | Border glows, then content fades    |
+| glow         | typewriter     | Border glows, then content types    |
+| none         | typewriter     | Border instant, content types       |
+
+** Render Functions (Signatures)
+
+All functions are stateless. Writer and allocator passed as parameters, never stored.
+
+#+begin_src zig
+// Instant render (no animation)
+pub fn render(writer: *std.Io.Writer, block: Block) !void
+
+// Content effects
+pub fn fadeIn(writer, allocator, block, FadeConfig) !void
+pub fn typewriter(writer, block, FrameInfo, TypewriterConfig) !void
+
+// Frame effects
+pub fn glow(writer, allocator, block, FrameInfo, GlowConfig) !void
+
+// Combined (frame effect + content effect)
+pub fn glowThenFade(writer, allocator, block, FrameInfo, GlowConfig, FadeConfig) !void
+pub fn glowThenTypewriter(writer, allocator, block, FrameInfo, GlowConfig, TypewriterConfig) !void
+
+// Utilities (never flush - caller controls flush)
+pub fn reserveSpace(writer, lines: usize) !void
+pub fn cursorUp(writer, lines: usize) !void
+pub fn cursorToColumn(writer, column: usize) !void
+pub fn hideCursor(writer) !void
+pub fn showCursor(writer) !void
+#+end_src
+
+** Frame Information
+FrameInfo tells animation functions which lines are frame (borders) vs content:
+
+- ~header_lines~: number of top border lines (typically 1 for box)
+- ~footer_lines~: number of bottom border lines (typically 1 for box)
+- Presets: ~FrameInfo.none~ (no frame), ~FrameInfo.box~ (1 header, 1 footer)
+
+** Configuration Types
+
+*** FadeConfig
+- ~steps~: number of opacity steps (default: 8)
+- ~step_delay_ns~: delay between steps (default: 40ms)
+
+*** TypewriterConfig
+- ~char_delay_ns~: delay between characters (default: 20ms)
+- ~line_delay_ns~: additional delay between lines (default: 0)
+- ~frame_instant~: render frame immediately (default: true)
+
+*** GlowConfig
+- ~steps~: number of glow steps (default: 10)
+- ~step_delay_ns~: delay between steps (default: 30ms)
+- ~start_colour~: initial border colour (dim)
+- ~end_colour~: final border colour (bright)
+
+** Implementation Notes
+
+*** Opacity
+Achieved via:
+- ANSI dim attribute (~\x1b[2m~) for low opacity
+- Colour interpolation toward background for partial opacity
+- Full colours for high opacity
+
+*** Flush Behaviour
+Utility functions (~reserveSpace~, ~cursorUp~, etc.) never flush. Animation functions flush after each frame. Caller can flush after final render.
+
+*** Graceful Degradation
+~shouldAnimate(file)~ checks if output is TTY. Non-TTY falls back to instant render.
+
+* Design Details
+
+** Staggered Section Animation
+Multiple sections can animate sequentially:
+1. First section: reserves space, animates in place (no line jump)
+2. Later sections: can line-jump (they appear below stable content)
+3. Creates staggered reveal effect with delays between sections
+
+** ANSI Escape Sequences Used
+
+| Sequence       | Name    | Description                          |
+|----------------+---------+--------------------------------------|
+| ~\x1b[{n}F~    | CPL     | Cursor Previous Line (up n, col 1)   |
+| ~\x1b[{n}E~    | CNL     | Cursor Next Line (down n, col 1)     |
+| ~\x1b[{n}G~    | CHA     | Cursor Horizontal Absolute (col n)   |
+| ~\x1b[?25l~    | DECTCEM | Hide cursor                          |
+| ~\x1b[?25h~    | DECTCEM | Show cursor                          |
+| ~\x1b[2m~      | SGR     | Dim/faint text                       |
+| ~\x1b[22m~     | SGR     | Normal intensity                     |
+
+** Memory Management
+Animation functions that modify styles need allocator for intermediate strings. Recommend arena allocator for animation loops to avoid per-frame allocation overhead.
+
+* Examples
+
+** Basic Usage
+#+begin_src zig
+// Content → Layout → Render (with animation)
+const block = try box.wrap(allocator, header.toBlock(allocator, width), width);
+defer block.deinit(allocator);
+
+try ren.render.fadeIn(&writer, allocator, block, .{});  // fade-in
+// or
+try ren.render.typewriter(&writer, block, .box, .{});   // typewriter
+// or
+try ren.render.glow(&writer, allocator, block, .box, .{});  // border glow
+#+end_src
+
+** Combined: Glow Then Fade
+#+begin_src zig
+// Border glows first, then content fades in
+try ren.render.glowThenFade(&writer, allocator, block, .box,
+    .{ .start_colour = Colour.hex("#333"), .end_colour = Colour.hex("#fff") },
+    .{ .steps = 8 },
+);
+#+end_src
+
+** Staggered Sections
+#+begin_src zig
+// Section 1: fades in (space reserved, no jump)
+try ren.render.fadeIn(&writer, allocator, header_block, .{});
+
+std.posix.nanosleep(0, 150 * std.time.ns_per_ms);
+
+// Section 2: appears below (line jump OK - below stable content)
+try ren.render.typewriter(&writer, body_block, .box, .{});
+#+end_src
+
+* Drawbacks
+- **Complexity**: Animation adds API surface
+- **Terminal compatibility**: Not all terminals support all escape codes
+- **Performance**: Frequent flush calls have overhead
+- **Opacity limitations**: True opacity requires parsing/modifying ANSI codes in content
+
+* Alternatives
+
+** No Animation
+Leave animation to users. Simpler library but less sophisticated out-of-box.
+
+** Callback-Based Timing
+Let caller provide timing callbacks instead of nanosleep. More flexible but more complex API.
+
+* Infrastructure Needed
+All implementable with Zig stdlib:
+- Cursor control (ANSI escape sequences)
+- TTY detection (~std.posix.isatty~)
+- Colour interpolation (extend colour.zig)
+- UTF-8 iteration (~std.unicode.Utf8Iterator~)
+- Timing (~std.posix.nanosleep~)
+
+* History
+- 2025-12-10: Initial draft created
+
+* References
+- ANSI Escape Codes: https://en.wikipedia.org/wiki/ANSI_escape_code
+- XTerm Control Sequences: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+- [[file:block-based-rendering.org][Block-Based Architecture: Content, Layout, Render]]
