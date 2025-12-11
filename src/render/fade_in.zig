@@ -132,9 +132,7 @@ fn prepareAnimation(writer: *std.Io.Writer, height: usize) !void {
 }
 
 /// Cleanup after animation
-/// Shows cursor again
 fn cleanupAnimation(writer: *std.Io.Writer) void {
-    common.showCursor(writer) catch {};
     writer.flush() catch {};
 }
 
