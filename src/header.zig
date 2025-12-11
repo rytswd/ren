@@ -8,6 +8,54 @@ const terminal = @import("terminal.zig");
 const unicode = @import("unicode.zig");
 const Block = @import("block.zig").Block;
 
+/// Generic helper to centre a block created by a toBlock function
+/// Reduces duplication between ProgressHeader and StarterHeader
+fn centreBlock(
+    allocator: std.mem.Allocator,
+    target_width: usize,
+    header: anytype,
+    comptime toBlockFn: fn (@TypeOf(header), std.mem.Allocator, usize) anyerror!Block,
+) !Block {
+    // Calculate natural width needed
+    const natural_width = @min(target_width, @max(60, target_width * 3 / 4));
+
+    // If no space for centring, just use regular toBlock
+    if (target_width <= natural_width) {
+        return toBlockFn(header, allocator, target_width);
+    }
+
+    // Build block at natural width
+    const inner = try toBlockFn(header, allocator, natural_width);
+    defer inner.deinit(allocator);
+
+    // Centre the block
+    const left_pad = (target_width - natural_width) / 2;
+    const padding = try allocator.alloc(u8, left_pad);
+    defer allocator.free(padding);
+    @memset(padding, ' ');
+
+    var centred_lines = try allocator.alloc(Block.Line, inner.lines.len);
+    errdefer allocator.free(centred_lines);
+
+    for (inner.lines, 0..) |line, i| {
+        const content = try std.fmt.allocPrint(allocator, "{s}{s}", .{
+            padding,
+            line.content,
+        });
+
+        centred_lines[i] = .{
+            .content = content,
+            .display_width = left_pad + line.display_width,
+        };
+    }
+
+    return .{
+        .lines = centred_lines,
+        .width = target_width,
+        .height = inner.height,
+    };
+}
+
 /// Build a separator line Block (Content layer)
 pub fn separatorBlock(allocator: std.mem.Allocator, width: usize, config: Config) !Block {
     var line: std.ArrayList(u8) = .empty;
@@ -174,6 +222,15 @@ pub const ProgressHeader = struct {
             .height = 3,
         };
     }
+
+    /// Produce a centred Block for this header
+    /// Single-phase: creates content at natural width then centres within target width
+    pub fn toBlockCentred(self: ProgressHeader, allocator: std.mem.Allocator, target_width: usize) !Block {
+        return centreBlock(allocator, target_width, self, ProgressHeader.toBlock);
+    }
+
+    // US spelling alias
+    pub const toBlockCentered = toBlockCentred;
 
     fn buildProgressLine(self: ProgressHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
         var line: std.ArrayList(u8) = .empty;
@@ -357,6 +414,15 @@ pub const StarterHeader = struct {
             .height = 3,
         };
     }
+
+    /// Produce a centred Block for this header
+    /// Single-phase: creates content at natural width then centres within target width
+    pub fn toBlockCentred(self: StarterHeader, allocator: std.mem.Allocator, target_width: usize) !Block {
+        return centreBlock(allocator, target_width, self, StarterHeader.toBlock);
+    }
+
+    // US spelling alias
+    pub const toBlockCentered = toBlockCentred;
 
     fn buildTopLine(self: StarterHeader, allocator: std.mem.Allocator, width: usize) !Block.Line {
         var line: std.ArrayList(u8) = .empty;
@@ -558,6 +624,125 @@ test "StarterHeader with custom starter_marker" {
         \\❯ ──────────────────────────────────────────────────────────
         \\                           Custom
         \\────────────────────────────────────────────────────────────
+    ;
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
+test "ProgressHeader toBlockCentred" {
+    const allocator = std.testing.allocator;
+    const config = Config{ .use_colour = false };
+    const header = ProgressHeader.init(1, 3, "Building", config);
+
+    const block = try header.toBlockCentred(allocator, 80);
+    defer block.deinit(allocator);
+
+    const output = try block.toString(allocator);
+    defer allocator.free(output);
+
+    // Block should be centred within 80 columns with padding on left
+    try std.testing.expectEqual(@as(usize, 80), block.width);
+    try std.testing.expectEqual(@as(usize, 3), block.height);
+
+    // Check that output starts with spaces (centring)
+    const expected =
+        \\          ● ◉ ○ ──────────────────────────────────────────── [ 2 / 3 ]
+        \\                                    Building
+        \\          ────────────────────────────────────────────────────────────
+    ;
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
+test "ProgressHeader toBlockCentred with small target" {
+    const allocator = std.testing.allocator;
+    const config = Config{ .use_colour = false };
+    const header = ProgressHeader.init(1, 3, "Test", config);
+
+    // Target too small for centring - should use regular toBlock at target width
+    const block = try header.toBlockCentred(allocator, 40);
+    defer block.deinit(allocator);
+
+    const output = try block.toString(allocator);
+    defer allocator.free(output);
+
+    try std.testing.expectEqual(@as(usize, 40), block.width);
+
+    // Should look like regular toBlock output (no extra padding)
+    const expected =
+        \\● ◉ ○ ──────────────────────── [ 2 / 3 ]
+        \\                  Test
+        \\────────────────────────────────────────
+    ;
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
+test "StarterHeader toBlockCentred" {
+    const allocator = std.testing.allocator;
+    const config = Config{ .use_colour = false };
+    const header = StarterHeader.init("Welcome", "ren", config);
+
+    const block = try header.toBlockCentred(allocator, 80);
+    defer block.deinit(allocator);
+
+    const output = try block.toString(allocator);
+    defer allocator.free(output);
+
+    // Block should be centred within 80 columns
+    try std.testing.expectEqual(@as(usize, 80), block.width);
+    try std.testing.expectEqual(@as(usize, 3), block.height);
+
+    // Expect centred output (10 spaces padding on left)
+    const expected =
+        \\          ⚝ ────────────────────────────────────────────────── [ ren ]
+        \\                                    Welcome
+        \\          ────────────────────────────────────────────────────────────
+    ;
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
+test "StarterHeader toBlockCentred without context" {
+    const allocator = std.testing.allocator;
+    const config = Config{ .use_colour = false };
+    const header = StarterHeader.init("Status", null, config);
+
+    const block = try header.toBlockCentred(allocator, 80);
+    defer block.deinit(allocator);
+
+    const output = try block.toString(allocator);
+    defer allocator.free(output);
+
+    try std.testing.expectEqual(@as(usize, 80), block.width);
+
+    const expected =
+        \\          ⚝ ──────────────────────────────────────────────────────────
+        \\                                     Status
+        \\          ────────────────────────────────────────────────────────────
+    ;
+
+    try std.testing.expectEqualStrings(expected, output);
+}
+
+test "StarterHeader toBlockCentred with small target" {
+    const allocator = std.testing.allocator;
+    const config = Config{ .use_colour = false };
+    const header = StarterHeader.init("Test", null, config);
+
+    const block = try header.toBlockCentred(allocator, 40);
+    defer block.deinit(allocator);
+
+    const output = try block.toString(allocator);
+    defer allocator.free(output);
+
+    try std.testing.expectEqual(@as(usize, 40), block.width);
+
+    // No centring - regular toBlock output
+    const expected =
+        \\⚝ ──────────────────────────────────────
+        \\                  Test
+        \\────────────────────────────────────────
     ;
 
     try std.testing.expectEqualStrings(expected, output);
