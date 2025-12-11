@@ -3,6 +3,8 @@ pkgs.mkShell {
   # Add build dependencies
   packages = [
     inputs.zig-overlay.packages.${pkgs.system}.master
+    pkgs.asciinema
+    pkgs.asciinema-agg
   ];
 
   # Add environment variables
