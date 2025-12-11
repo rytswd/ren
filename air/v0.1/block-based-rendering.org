@@ -587,7 +587,7 @@ pub fn main() !void {
     // ... setup ...
 
     const zen = ren.zen.Zen{ .top_padding = 2, .bottom_padding = 1, .left_indent = 4 };
-    const header = ren.header.StarterHeader.init("Welcome", "ren", .{});
+    const header = ren.header.StarterHeader.init("Welcome", "Ren", .{});
 
     const header_block = try header.toBlock(allocator, 56);  // 60 - 4 indent
     defer header_block.deinit(allocator);
@@ -604,7 +604,7 @@ Output:
 #+begin_example
 
 
-    ⚝ ──────────────────────────────────────────── [ ren ]
+    ⚝ ──────────────────────────────────────────── [ Ren ]
                          Welcome
     ────────────────────────────────────────────────────
 

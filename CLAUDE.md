@@ -1,6 +1,6 @@
 # Project Context for Claude
 
-`ren` (練) is a lightweight Zig library for sophisticated terminal output rendering. The name comes from 洗練 (senren), meaning "refined" or "sophisticated" - reflecting the project's philosophy: simple, small, and sophisticated.
+`Ren` (練) is a lightweight Zig library for sophisticated terminal output rendering. The name comes from 洗練 (senren), meaning "refined" or "sophisticated" - reflecting the project's philosophy: simple, small, and sophisticated.
 
 **Key Information:**
 - **Language**: Zig (master branch / v0.16 candidate)

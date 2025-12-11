@@ -1,4 +1,4 @@
-//! Demo executable for ren (練)
+//! Demo executable for Ren (練)
 //! Demonstrates the capabilities of the sophisticated terminal rendering library
 
 const std = @import("std");
@@ -30,7 +30,7 @@ fn printUsage(stdout: *std.Io.Writer) !void {
         \\Usage: ren-demo [--demo <type>]
         \\
         \\Demos:
-        \\  overview     Overview of ren library (default)
+        \\  overview     Overview of Ren library (default)
         \\  headers      Header types and styles
         \\  palettes     Colour palettes and gradients
         \\  animations   Animation effects

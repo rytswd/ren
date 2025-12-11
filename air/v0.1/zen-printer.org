@@ -224,7 +224,7 @@ Extremely subtle colour use:
 
 
 
-                  ren (練)
+                  Ren (練)
 
           Terminal Rendering Library
 
@@ -242,7 +242,7 @@ Extremely subtle colour use:
   ─────────────────────────────────────
 
 
-  ren is a sophisticated terminal rendering
+  Ren is a sophisticated terminal rendering
   library for Zig, embodying the principle
   of 洗練 (senren) - refinement.
 
@@ -332,7 +332,7 @@ Note: With subtle pastel rainbow enabled (truecolor), each dot would have a soft
 
 
 
-        Welcome to ren
+        Welcome to Ren
 
 
 

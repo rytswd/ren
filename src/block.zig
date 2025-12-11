@@ -53,21 +53,23 @@ pub const Block = struct {
     }
 
     /// Create a Block from text lines, centred within target width
-    /// Single-phase allocation - creates and positions in one step
+    /// When using MinWidth.fixed, the fixed value is used as a minimum width
+    /// If actual content is wider, the actual width is used for centering
     pub fn initCentred(allocator: std.mem.Allocator, text_lines: []const []const u8, min_width: MinWidth, target_width: usize) !Block {
-        // Determine content width based on MinWidth
+        // Calculate actual max width of all lines
+        var actual_max_width: usize = 0;
+        for (text_lines) |text| {
+            const display_width = unicode.displayWidth(text);
+            if (display_width > actual_max_width) {
+                actual_max_width = display_width;
+            }
+        }
+
+        // Determine content width for centering
+        // Use max of min_width and actual content to ensure content fits
         const content_width = switch (min_width) {
-            .auto => blk: {
-                var max_width: usize = 0;
-                for (text_lines) |text| {
-                    const display_width = unicode.displayWidth(text);
-                    if (display_width > max_width) {
-                        max_width = display_width;
-                    }
-                }
-                break :blk max_width;
-            },
-            .fixed => |width| width,
+            .auto => actual_max_width,
+            .fixed => |width| @max(width, actual_max_width),
         };
 
         // If target width is not greater than content, just use regular init
@@ -166,12 +168,12 @@ test "Block init from text lines" {
 test "Block with CJK characters" {
     const allocator = std.testing.allocator;
 
-    const text = [_][]const u8{ "ren", "練" };
+    const text = [_][]const u8{ "Ren", "練" };
     const block = try Block.init(allocator, &text);
     defer block.deinit(allocator);
 
     try std.testing.expectEqual(2, block.height);
-    try std.testing.expectEqual(3, block.lines[0].display_width); // "ren" = 3
+    try std.testing.expectEqual(3, block.lines[0].display_width); // "Ren" = 3
     try std.testing.expectEqual(2, block.lines[1].display_width); // "練" = 2 (CJK)
     try std.testing.expectEqual(3, block.width); // max width
 }

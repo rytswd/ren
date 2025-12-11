@@ -18,8 +18,8 @@ The overview demo needs to centre blocks within the terminal. Additionally, when
 
 Example - centred block in 80-column terminal:
 #+begin_example
-          ⚝ ───────────────────────────── [ ren ]
-                       ren (練)
+          ⚝ ───────────────────────────── [ Ren ]
+                       Ren (練)
           ─────────────────────────────────────────
 #+end_example
 
@@ -78,7 +78,7 @@ const footer = try Block.initCentred(allocator, &footer_lines, align_width, term
 *** Use Case 1: Simple auto centring
 #+begin_src zig
 // Title - auto-calculate width and centre
-const title = ren.header.StarterHeader.init("ren (練)", "v0.1.0", config);
+const title = ren.header.StarterHeader.init("Ren (練)", "v0.1.0", config);
 const title_block = try title.toBlockCentred(allocator, term_width);
 defer title_block.deinit(allocator);
 

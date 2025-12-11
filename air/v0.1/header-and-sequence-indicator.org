@@ -53,7 +53,7 @@ Visual design (implemented with defaults):
 For one-off operations or standalone output:
 
 #+begin_example
-⚝ ────────────────────────────────────────────── [ ren ]
+⚝ ────────────────────────────────────────────── [ Ren ]
        Configuration
 ────────────────────────────────────────────────────────
 
@@ -64,12 +64,12 @@ For one-off operations or standalone output:
 Visual design (default styling, all configurable):
 - Starter char: `⚝` - outlined star character (can be customised or empty)
 - Separator line: `─` extends to terminal width
-- Top right label: `[ ren ]` or contextual info
+- Top right label: `[ Ren ]` or contextual info
 - Title: Centred below starter
 - Full separator line below title
 
 Top right label options:
-- Library name: `[ ren ]`
+- Library name: `[ Ren ]`
 - Operation type: `[ status ]`, `[ info ]`
 - Custom context provided by user
 

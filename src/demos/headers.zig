@@ -41,7 +41,7 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     // /==========================================
     try stdout.print("  StarterHeader - Section headers with optional tags:\n\n", .{});
 
-    const starter1 = ren.header.StarterHeader.init("Configuration", "ren", ren.header.Config{});
+    const starter1 = ren.header.StarterHeader.init("Configuration", "Ren", ren.header.Config{});
     block = try starter1.toBlock(allocator, 60);
     try ren.render.render(stdout, block);
     block.deinit(allocator);

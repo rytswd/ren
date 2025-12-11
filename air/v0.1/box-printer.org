@@ -363,7 +363,7 @@ Support truecolor, 256-colour, and 16-colour palettes.
 #+begin_example
 ┌────────────────────────────────────────┐
 │                                        │░
-│              ren (練)                  │░
+│              Ren (練)                  │░
 │                                        │░
 │  A sophisticated terminal rendering    │░
 │  library for Zig                       │░

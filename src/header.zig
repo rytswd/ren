@@ -583,7 +583,7 @@ test "Config renderSeparator two_colour gradient - exact 60 char match" {
 test "StarterHeader toBlock - exact match" {
     const allocator = std.testing.allocator;
 
-    const starter = StarterHeader.init("Configuration", "ren", Config{ .use_colour = false });
+    const starter = StarterHeader.init("Configuration", "Ren", Config{ .use_colour = false });
     const block = try starter.toBlock(allocator, 60);
     defer block.deinit(allocator);
 
@@ -591,7 +591,7 @@ test "StarterHeader toBlock - exact match" {
     try std.testing.expectEqual(60, block.width);
 
     try std.testing.expectEqualStrings(
-        \\⚝ ────────────────────────────────────────────────── [ ren ]
+        \\⚝ ────────────────────────────────────────────────── [ Ren ]
     , block.lines[0].content);
 
     try std.testing.expectEqualStrings(
@@ -681,7 +681,7 @@ test "ProgressHeader toBlockCentred with small target" {
 test "StarterHeader toBlockCentred" {
     const allocator = std.testing.allocator;
     const config = Config{ .use_colour = false };
-    const header = StarterHeader.init("Welcome", "ren", config);
+    const header = StarterHeader.init("Welcome", "Ren", config);
 
     const block = try header.toBlockCentred(allocator, 80);
     defer block.deinit(allocator);
@@ -695,7 +695,7 @@ test "StarterHeader toBlockCentred" {
 
     // Expect centred output (10 spaces padding on left)
     const expected =
-        \\          ⚝ ────────────────────────────────────────────────── [ ren ]
+        \\          ⚝ ────────────────────────────────────────────────── [ Ren ]
         \\                                    Welcome
         \\          ────────────────────────────────────────────────────────────
     ;

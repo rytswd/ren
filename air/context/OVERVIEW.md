@@ -1,7 +1,7 @@
 # Project Overview
 
 ## Description
-`ren` (練) is a lightweight Zig library for sophisticated terminal output rendering. The name comes from 洗練 (senren), meaning "refined" or "sophisticated" - reflecting the project's core philosophy: simple, small, and sophisticated.
+`Ren` (練) is a lightweight Zig library for sophisticated terminal output rendering. The name comes from 洗練 (senren), meaning "refined" or "sophisticated" - reflecting the project's core philosophy: simple, small, and sophisticated.
 
 It provides utilities for creating refined terminal interfaces with features like box drawing, styled text rendering, and flexible layout management - all while maintaining simplicity and zero external dependencies.
 
@@ -40,7 +40,7 @@ ren/
 ```
 
 ## Architecture
-`ren` is designed as a library of composable printing utilities. Each module provides focused functionality that can be used independently or combined for more complex output rendering.
+`Ren` is designed as a library of composable printing utilities. Each module provides focused functionality that can be used independently or combined for more complex output rendering.
 
 Key design decisions:
 - **Compile-time configuration**: Use Zig's comptime features for zero-cost abstractions

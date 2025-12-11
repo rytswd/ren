@@ -1,4 +1,4 @@
-//! ren (練) - A sophisticated terminal rendering library for Zig
+//! Ren (練) - A sophisticated terminal rendering library for Zig
 //!
 //! Embodies the principle of 洗練 (senren) - refinement and sophistication.
 //! Simple, small, sophisticated.

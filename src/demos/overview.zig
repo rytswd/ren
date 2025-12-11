@@ -1,4 +1,4 @@
-//! Overview demo - Shows ren library at a glance with header, docs, and footer
+//! Overview demo - Shows Ren library at a glance with header, docs, and footer
 
 const std = @import("std");
 const ren = @import("ren");
@@ -20,7 +20,7 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer, is_tty: bool) !
             .end = Colour.hex("#70B0F0"),
         } },
     };
-    const title = ren.header.StarterHeader.init("ren (練)", "v0.1.0", title_config);
+    const title = ren.header.StarterHeader.init("Ren (練)", "v0.1.0", title_config);
     var title_block = try title.toBlock(allocator, width);
     defer title_block.deinit(allocator);
 
@@ -40,13 +40,13 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer, is_tty: bool) !
     // ///----------------------------------------
     // //  Documentation with staggered fade-in
     // /------------------------------------------
-    // Use predefined fixed width for uniform alignment with separator and footer
-    const align_width: ren.block.MinWidth = .{ .fixed = @min(75, width * 4 / 5) };
+    // Use auto width for natural content centering
+    const align_width: ren.block.MinWidth = .auto;
 
     const doc_lines = [_][]const u8{
         "  A lightweight Zig library for sophisticated terminal output rendering.",
         "  ",
-        "  ren embodies the principle of 洗練 (senren) - sophistication through refinement.",
+        "  Ren embodies the principle of 洗練 (senren) - sophistication through refinement.",
         "  Simple APIs, zero dependencies, beautiful output.",
         "  ",
         "  Features:",

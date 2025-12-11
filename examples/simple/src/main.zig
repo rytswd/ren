@@ -1,4 +1,4 @@
-//! Simple demo - Shows ren library at a glance with header, docs, and footer
+//! Simple demo - Shows Ren library at a glance with header, docs, and footer
 
 const std = @import("std");
 const ren = @import("ren");
@@ -27,7 +27,7 @@ pub fn main() !void {
     const width = term_width orelse 60;
 
     // Create and centre a header
-    const header = ren.header.StarterHeader.init("Welcome", "ren", .{
+    const header = ren.header.StarterHeader.init("Welcome", "Ren", .{
         .separator_gradient = .rainbow,
     });
     const block = try header.toBlockCentred(allocator, width);

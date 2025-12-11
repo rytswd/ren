@@ -1,0 +1,59 @@
+:PROPERTIES:
+:ID:       bed4b6ce-d125-4e45-8574-54ed263091da
+:END:
+#+title: Ren (練) - Refined Terminal Rendering in Zig
+#+STARTUP: inlineimages
+
+A lightweight Zig library for sophisticated terminal output rendering.
+
+The name comes from *洗練 (senren)* - "refined" or "sophisticated".
+
+
+** Demo
+
+[[file:assets/demo-overview.gif]]
+
+#+begin_src sh
+  zig build run                    # Overview demo
+  zig build run -- --demo headers  # Header styles
+#+end_src
+
+** Features
+
+- Zero dependencies (only Zig stdlib)
+- Rich colour support (gradients, palettes, truecolour)
+- Flexible alignment (centre blocks, uniform padding)
+- Beautiful animations (fade-in, staggered wave effects)
+
+** Quick Example
+
+#+begin_src zig
+  const ren = @import("ren");
+
+  // ...
+
+  // Create and centre a header
+  const header = ren.header.StarterHeader.init("Welcome", "Ren", .{
+      .separator_gradient = .rainbow,
+  });
+  const block = try header.toBlockCentred(allocator, term_width);
+  defer block.deinit(allocator);
+
+  // Render with animation
+  const is_tty = std.fs.File.stdout().isTty();
+  if (is_tty) {
+      try ren.render.staggeredFadeIn(allocator, stdout, block, .{});
+      try ren.render.showCursor(stdout);
+  } else {
+      try ren.render.instant(stdout, block);
+  }
+  try stdout.flush();
+#+end_src
+
+The above code is a contrived snippet from [[file:/examples/simple/src/main.zig][examples/simple/src/main.zig]]. \\
+You can find more examples in ~examples~ directory.
+
+** Status
+
+Early development (v0.1). API is unstable and subject to change. \\
+Ren is based on the unreleased Zig 0.16 (~0.16.0-dev.1484+d0ba6642b~).

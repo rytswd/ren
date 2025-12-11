@@ -8,9 +8,9 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     try stdout.print("\n", .{});
 
     // ///========================================
-    // //  Default palette (ren)
+    // //  Default palette (Ren)
     // /==========================================
-    try stdout.print("  ren palette (default):\n\n", .{});
+    try stdout.print("  Ren palette (default):\n\n", .{});
     const ren_config = ren.header.Config{};
 
     var demo = ren.header.ProgressHeader.init(0, 3, "Initializing", ren_config);

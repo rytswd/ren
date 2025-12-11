@@ -311,7 +311,7 @@ test "Palette fallback to neutral" {
     try std.testing.expectEqual(100, primary_colour.r);
 }
 
-/// The ren palette - default sophisticated palette
+/// The Ren palette - default sophisticated palette
 pub const ren = Palette{
     .neutral = .{ .r = 180, .g = 180, .b = 180 },
     .primary = .{ .r = 230, .g = 180, .b = 100 }, // warm amber

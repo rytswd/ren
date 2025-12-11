@@ -2,7 +2,7 @@
 
 ## Core Philosophy
 
-`ren` (練) embodies the principle of 洗練 (senren) - sophistication through refinement. It's a lightweight Zig library for terminal output that achieves sophisticated results through simple, small, and composable building blocks.
+`Ren` (練) embodies the principle of 洗練 (senren) - sophistication through refinement. It's a lightweight Zig library for terminal output that achieves sophisticated results through simple, small, and composable building blocks.
 
 **Simple, Small, Sophisticated:**
 - **Simple**: Intuitive APIs that make common tasks easy
@@ -80,7 +80,7 @@ ren/
 
 ### 1. Box Printer System
 
-The box printer is the primary feature of `ren`, providing flexible box drawing around text content.
+The box printer is the primary feature of `Ren`, providing flexible box drawing around text content.
 
 #### Key Features
 - Multiple border styles (single, double, rounded, ASCII-only)
@@ -102,7 +102,7 @@ Minimalist printing utilities for clean terminal output.
 #### Key Features
 - Simple text formatting and alignment
 - Minimal API surface
-- Composable with other ren utilities
+- Composable with other Ren utilities
 - Focus on readability and ease of use
 
 ### 3. Unicode Support
