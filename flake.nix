@@ -1,5 +1,5 @@
 {
-  description = "ren (練) - sophisticated terminal rendering library for Zig";
+  description = "Ren (練) - sophisticated terminal rendering library for Zig";
 
   # Add all your dependencies here
   inputs = {
@@ -10,6 +10,6 @@
     zig-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  # Load the blueprint
-  outputs = inputs: inputs.blueprint { inherit inputs; };
+  # Load the blueprint from nix/ directory
+  outputs = inputs: inputs.blueprint { inherit inputs; prefix = "nix"; };
 }
