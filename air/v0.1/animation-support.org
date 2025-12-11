@@ -96,14 +96,14 @@ All functions are stateless. Writer and allocator passed as parameters, never st
 pub fn render(writer: *std.Io.Writer, block: Block) !void
 
 // Content effects
-pub fn fadeIn(writer, allocator, block, FadeConfig) !void
+pub fn fadeIn(allocator, writer, block, FadeConfig) !void
 pub fn typewriter(writer, block, FrameInfo, TypewriterConfig) !void
 
 // Frame effects
-pub fn glow(writer, allocator, block, FrameInfo, GlowConfig) !void
+pub fn glow(allocator, writer, block, FrameInfo, GlowConfig) !void
 
 // Combined (frame effect + content effect)
-pub fn glowThenFade(writer, allocator, block, FrameInfo, GlowConfig, FadeConfig) !void
+pub fn glowThenFade(allocator, writer, block, FrameInfo, GlowConfig, FadeConfig) !void
 pub fn glowThenTypewriter(writer, allocator, block, FrameInfo, GlowConfig, TypewriterConfig) !void
 
 // Utilities (never flush - caller controls flush)
@@ -183,17 +183,17 @@ Animation functions that modify styles need allocator for intermediate strings. 
 const block = try box.wrap(allocator, header.toBlock(allocator, width), width);
 defer block.deinit(allocator);
 
-try ren.render.fadeIn(&writer, allocator, block, .{});  // fade-in
+try ren.render.fadeIn(allocator, writer, block, .{});  // fade-in
 // or
-try ren.render.typewriter(&writer, block, .box, .{});   // typewriter
+try ren.render.typewriter(writer, block, .box, .{});   // typewriter
 // or
-try ren.render.glow(&writer, allocator, block, .box, .{});  // border glow
+try ren.render.glow(allocator, writer, block, .box, .{});  // border glow
 #+end_src
 
 ** Combined: Glow Then Fade
 #+begin_src zig
 // Border glows first, then content fades in
-try ren.render.glowThenFade(&writer, allocator, block, .box,
+try ren.render.glowThenFade(allocator, writer, block, .box,
     .{ .start_colour = Colour.hex("#333"), .end_colour = Colour.hex("#fff") },
     .{ .steps = 8 },
 );
@@ -202,12 +202,12 @@ try ren.render.glowThenFade(&writer, allocator, block, .box,
 ** Staggered Sections
 #+begin_src zig
 // Section 1: fades in (space reserved, no jump)
-try ren.render.fadeIn(&writer, allocator, header_block, .{});
+try ren.render.fadeIn(allocator, writer, header_block, .{});
 
 std.posix.nanosleep(0, 150 * std.time.ns_per_ms);
 
 // Section 2: appears below (line jump OK - below stable content)
-try ren.render.typewriter(&writer, body_block, .box, .{});
+try ren.render.typewriter(writer, body_block, .box, .{});
 #+end_src
 
 * Drawbacks

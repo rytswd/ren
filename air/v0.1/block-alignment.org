@@ -82,13 +82,13 @@ const title = ren.header.StarterHeader.init("ren (練)", "v0.1.0", config);
 const title_block = try title.toBlockCentred(allocator, term_width);
 defer title_block.deinit(allocator);
 
-try ren.render.fadeIn(stdout, allocator, title_block, .{});
+try ren.render.fadeIn(allocator, stdout, title_block, .{});
 
 // Documentation - auto-calculate width and centre
 const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, .auto, term_width);
 defer doc_block.deinit(allocator);
 
-try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{});
+try ren.render.staggeredFadeIn(allocator, stdout, doc_block, .{});
 #+end_src
 
 *** Use Case 2: Multiple blocks with uniform alignment

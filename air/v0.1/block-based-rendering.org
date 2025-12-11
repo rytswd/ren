@@ -336,7 +336,7 @@ defer boxed.deinit(allocator);
 const spaced = try zen.wrap(allocator, boxed);
 defer spaced.deinit(allocator);
 
-try ren.render.fadeIn(&writer, allocator, spaced, .{});  // Animated render
+try ren.render.fadeIn(allocator, &writer, spaced, .{});  // Animated render
 #+end_src
 
 ** Memory Management
@@ -407,9 +407,9 @@ Animation is handled entirely in the Render layer. Content and Layout are unawar
 
 The Render layer provides:
 - **Instant**: ~render(writer, block)~ - output immediately
-- **Fade-in**: ~fadeIn(writer, allocator, block, config)~ - space-reserving fade
+- **Fade-in**: ~fadeIn(allocator, writer, block, config)~ - space-reserving fade
 - **Typewriter**: ~typewriter(writer, block, config)~ - character-by-character reveal
-- **Glow**: ~glow(writer, allocator, block, config)~ - border illumination effect
+- **Glow**: ~glow(allocator, writer, block, config)~ - border illumination effect
 
 All animation functions follow the space-reserving pattern:
 1. Reserve full height with blank/invisible content
@@ -499,7 +499,7 @@ pub fn main() !void {
     try writer.flush();
 
     // Or with animation
-    // try ren.render.fadeIn(&writer, allocator, boxed, .{});
+    // try ren.render.fadeIn(allocator, writer, boxed, .{});
 }
 #+end_src
 
@@ -531,7 +531,7 @@ pub fn main() !void {
     defer outer.deinit(allocator);
 
     // Render layer with animation
-    try ren.render.fadeIn(&writer, allocator, outer, .{
+    try ren.render.fadeIn(allocator, writer, outer, .{
         .steps = 10,
         .step_delay_ns = 30 * std.time.ns_per_ms,
     });
