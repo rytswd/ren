@@ -32,6 +32,9 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     // ///----------------------------------------
     // //  Documentation with staggered fade-in
     // /------------------------------------------
+    // Use predefined fixed width for uniform alignment with separator and footer
+    const align_width: ren.block.MinWidth = .{ .fixed = @min(75, width * 4 / 5) };
+
     const doc_lines = [_][]const u8{
         "  A lightweight Zig library for sophisticated terminal output rendering.",
         "  ",
@@ -45,7 +48,7 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
         "    • Fade-in and staggered effects",
         "    • Box drawing and layouts",
     };
-    const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, width);
+    const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, align_width, width);
     defer doc_block.deinit(allocator);
     try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{
         .steps = 12,
@@ -89,10 +92,10 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const footer_sep_block = try ren.header.separatorBlock(allocator, footer_sep_width, footer_config);
     defer footer_sep_block.deinit(allocator);
 
-    // Convert to text lines to centre
+    // Convert to text lines to centre with same alignment width
     const sep_line = footer_sep_block.lines[0].content;
     const sep_lines = [_][]const u8{sep_line};
-    const footer_sep = try ren.block.Block.initCentred(allocator, &sep_lines, width);
+    const footer_sep = try ren.block.Block.initCentred(allocator, &sep_lines, align_width, width);
     defer footer_sep.deinit(allocator);
 
     try ren.render.fadeIn(stdout, allocator, footer_sep, .{
@@ -118,7 +121,7 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
         "  ",
         footer_line3,
     };
-    const footer_block = try ren.block.Block.initCentred(allocator, &footer_lines, width);
+    const footer_block = try ren.block.Block.initCentred(allocator, &footer_lines, align_width, width);
     defer footer_block.deinit(allocator);
     try ren.render.staggeredFadeIn(stdout, allocator, footer_block, .{
         .steps = 12,

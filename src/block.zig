@@ -5,6 +5,14 @@
 const std = @import("std");
 const unicode = @import("unicode.zig");
 
+/// Minimum width specification for block alignment
+pub const MinWidth = union(enum) {
+    /// Auto-calculate from content (natural width)
+    auto,
+    /// Predefined fixed width for uniform alignment across multiple blocks
+    fixed: usize,
+};
+
 /// A Block represents rendered content as an array of lines
 pub const Block = struct {
     lines: []Line,
@@ -46,15 +54,21 @@ pub const Block = struct {
 
     /// Create a Block from text lines, centred within target width
     /// Single-phase allocation - creates and positions in one step
-    pub fn initCentred(allocator: std.mem.Allocator, text_lines: []const []const u8, target_width: usize) !Block {
-        // First calculate natural content width
-        var content_width: usize = 0;
-        for (text_lines) |text| {
-            const display_width = unicode.displayWidth(text);
-            if (display_width > content_width) {
-                content_width = display_width;
-            }
-        }
+    pub fn initCentred(allocator: std.mem.Allocator, text_lines: []const []const u8, min_width: MinWidth, target_width: usize) !Block {
+        // Determine content width based on MinWidth
+        const content_width = switch (min_width) {
+            .auto => blk: {
+                var max_width: usize = 0;
+                for (text_lines) |text| {
+                    const display_width = unicode.displayWidth(text);
+                    if (display_width > max_width) {
+                        max_width = display_width;
+                    }
+                }
+                break :blk max_width;
+            },
+            .fixed => |width| width,
+        };
 
         // If target width is not greater than content, just use regular init
         if (target_width <= content_width) {
@@ -181,11 +195,11 @@ test "Block toString for testing" {
     try std.testing.expectEqualStrings(expected, all_lines);
 }
 
-test "Block initCentred" {
+test "Block initCentred with auto" {
     const allocator = std.testing.allocator;
 
     const text = [_][]const u8{"Hello"};
-    const block = try Block.initCentred(allocator, &text, 15);
+    const block = try Block.initCentred(allocator, &text, .auto, 15);
     defer block.deinit(allocator);
 
     // "Hello" is 5 chars, centred in 15 = 5 left spaces
@@ -195,11 +209,23 @@ test "Block initCentred" {
     try std.testing.expectEqual(@as(usize, 10), block.lines[0].display_width);
 }
 
+test "Block initCentred with fixed width" {
+    const allocator = std.testing.allocator;
+
+    const text = [_][]const u8{"Hi"};
+    const block = try Block.initCentred(allocator, &text, .{ .fixed = 10 }, 20);
+    defer block.deinit(allocator);
+
+    // "Hi" is 2 chars, but centred as if it's 10 chars wide in 20 = 5 left spaces
+    try std.testing.expectEqual(@as(usize, 20), block.width);
+    try std.testing.expectEqualStrings("     Hi", block.lines[0].content);
+}
+
 test "Block initCentred with overflow" {
     const allocator = std.testing.allocator;
 
     const text = [_][]const u8{"Very long text"};
-    const block = try Block.initCentred(allocator, &text, 5);
+    const block = try Block.initCentred(allocator, &text, .auto, 5);
     defer block.deinit(allocator);
 
     // Content wider than target - use content width (no centring)

@@ -1,14 +1,20 @@
 #+title: Block Horizontal Alignment
-#+state: ready
+#+state: work-in-progress
 #+FILETAGS: :layout:alignment:block:
 
 * Summary
-Add horizontal alignment support for positioning blocks within available terminal width. Provide two approaches: **single-phase** with `toBlockCentred()` (recommended) and **two-phase** with separate alignment transforms (for flexibility).
+Add horizontal alignment support for positioning blocks within available terminal width. Support centring individual blocks or multiple blocks with uniform left padding via predefined fixed width. Blocks remain separate for independent rendering.
 
 * Motivation
-The overview demo needs to centre blocks within the terminal. Currently, all blocks are positioned at column 0 with no control over horizontal placement.
+The overview demo needs to centre blocks within the terminal. Additionally, when displaying multiple separate blocks (documentation, footer, etc.) that need independent rendering with different animations, they should have uniform left padding to align vertically.
 
 **Key distinction**: This is about positioning the block container, not aligning text inside it.
+
+**Requirements**:
+- Centre single blocks automatically
+- Centre multiple blocks with uniform left padding (same alignment)
+- Keep blocks separate for independent rendering (different animations)
+- Minimal API surface
 
 Example - centred block in 80-column terminal:
 #+begin_example
@@ -32,162 +38,170 @@ The entire header block is centred (equal space on left and right). The text ins
 
 * Proposal
 
-** Two Approaches
+** MinWidth Union
 
-*** Approach 1: Single-Phase (Recommended)
-Create and position in one step - simpler code, single allocation:
+Control how content width is determined for alignment:
 
 #+begin_src zig
-const centred = try header.toBlockCentred(allocator, term_width);
-defer centred.deinit(allocator);
+pub const MinWidth = union(enum) {
+    auto,           // Auto-calculate from content (natural width)
+    fixed: usize,   // Predefined fixed width for alignment
+};
 #+end_src
 
-*** Approach 2: Two-Phase (For Flexibility)
-Create then transform - allows dynamic positioning decisions:
+When using predefined fixed width, multiple separate blocks can align to the same width for uniform left padding while remaining independent for rendering.
+
+** API Design
 
 #+begin_src zig
-const block = try header.toBlock(allocator, 60);
-defer block.deinit(allocator);
+// Block.init - unchanged, text lines only
+pub fn init(allocator: Allocator, text_lines: []const []const u8) !Block
 
-const centred = try block.centre(allocator, term_width);
-defer centred.deinit(allocator);
+// Block.initCentred - now with MinWidth parameter
+pub fn initCentred(allocator: Allocator, text_lines: []const []const u8, min_width: MinWidth, target_width: usize) !Block
+#+end_src
+
+Usage:
+#+begin_src zig
+// Auto-calculate content width (simple case)
+const doc = try Block.initCentred(allocator, &doc_lines, .auto, term_width);
+
+// Predefined fixed width for uniform alignment (multiple blocks)
+const align_width: MinWidth = .{ .fixed = 70 };
+const doc = try Block.initCentred(allocator, &doc_lines, align_width, term_width);
+const footer = try Block.initCentred(allocator, &footer_lines, align_width, term_width);
+// Both have same left padding
 #+end_src
 
 ** Developer Use Cases
 
-*** Use Case 1: Centre everything (single-phase - recommended)
+*** Use Case 1: Simple auto centring
+#+begin_src zig
+// Title - auto-calculate width and centre
+const title = ren.header.StarterHeader.init("ren (練)", "v0.1.0", config);
+const title_block = try title.toBlockCentred(allocator, term_width);
+defer title_block.deinit(allocator);
+
+try ren.render.fadeIn(stdout, allocator, title_block, .{});
+
+// Documentation - auto-calculate width and centre
+const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, .auto, term_width);
+defer doc_block.deinit(allocator);
+
+try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{});
+#+end_src
+
+*** Use Case 2: Multiple blocks with uniform alignment
 #+begin_src zig
 pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const term_width = ren.terminal.detectWidth() orelse 80;
 
-    // Title
-    const title = ren.header.StarterHeader.init("ren (練)", "v0.1.0", config);
-    const title_block = try title.toBlockCentred(allocator, term_width);
-    defer title_block.deinit(allocator);
+    // Define predefined fixed width for vertical alignment
+    const align_width: ren.block.MinWidth = .{ .fixed = 70 };
 
-    try ren.render.fadeIn(stdout, allocator, title_block, .{});
-
-    // Documentation
-    const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, term_width);
+    // Documentation - centred with fixed width
+    const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, align_width, term_width);
     defer doc_block.deinit(allocator);
 
-    try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{});
+    try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{
+        .line_offset_steps = 1,
+    });
+
+    // Separator - centred with same fixed width
+    const sep_lines = [_][]const u8{ separator_line };
+    const sep_block = try ren.block.Block.initCentred(allocator, &sep_lines, align_width, term_width);
+    defer sep_block.deinit(allocator);
+
+    try ren.render.fadeIn(stdout, allocator, sep_block, .{});
+
+    // Footer - centred with same fixed width
+    const footer_block = try ren.block.Block.initCentred(allocator, &footer_lines, align_width, term_width);
+    defer footer_block.deinit(allocator);
+
+    try ren.render.instant(stdout, footer_block);
+
+    // All three blocks have same left padding, aligned vertically
+    // But rendered independently with different animations
 }
-#+end_src
-
-*** Use Case 2: Dynamic alignment decision (two-phase)
-#+begin_src zig
-const block = try content.toBlock(allocator, 60);
-defer block.deinit(allocator);
-
-const positioned = if (should_centre)
-    try block.centre(allocator, term_width)
-else
-    try block.duplicate(allocator);
-defer positioned.deinit(allocator);
-#+end_src
-
-*** Use Case 3: Reuse same content with different alignments (two-phase)
-#+begin_src zig
-const original = try header.toBlock(allocator, 60);
-defer original.deinit(allocator);
-
-const centred = try original.centre(allocator, term_width);
-defer centred.deinit(allocator);
-try ren.render.instant(stdout, centred);
-
-const right = try original.alignRight(allocator, term_width);
-defer right.deinit(allocator);
-try ren.render.instant(stdout, right);
 #+end_src
 
 ** API Overview
 
-*** Single-Phase API
-Add centred variants to content types:
-
 #+begin_src zig
 // block.zig
+pub const MinWidth = union(enum) {
+    auto,
+    fixed: usize,
+};
+
 pub fn init(allocator: Allocator, text_lines: []const []const u8) !Block
-pub fn initCentred(allocator: Allocator, text_lines: []const []const u8, target_width: usize) !Block
+pub fn initCentred(allocator: Allocator, text_lines: []const []const u8, min_width: MinWidth, target_width: usize) !Block
 
 // header.zig - ProgressHeader and StarterHeader
 pub fn toBlock(self: Self, allocator: Allocator, width: usize) !Block
 pub fn toBlockCentred(self: Self, allocator: Allocator, target_width: usize) !Block
-#+end_src
 
-*** Two-Phase API
-Add alignment transforms to Block:
-
-#+begin_src zig
-// block.zig
-pub fn centre(self: Block, allocator: Allocator, target_width: usize) !Block
-pub fn alignRight(self: Block, allocator: Allocator, target_width: usize) !Block
-pub fn duplicate(self: Block, allocator: Allocator) !Block
-#+end_src
-
-*** US Spelling Aliases
-Provide aliases for common US spelling:
-
-#+begin_src zig
-// British spelling (primary)
-pub fn centre(self: Block, allocator: Allocator, target_width: usize) !Block
-pub fn initCentred(...) !Block
-pub fn toBlockCentred(...) !Block
-
-// US spelling (aliases)
-pub const center = centre;
+// US spelling aliases
 pub const initCentered = initCentred;
 pub const toBlockCentered = toBlockCentred;
 #+end_src
 
 ** Behaviour
 
-All alignment operations:
-- If `target_width > block.width`: add padding to position
-- If `target_width <= block.width`: return at natural width (no centring)
+Centring with MinWidth:
+- `.auto`: Calculate content width from longest line, centre based on that
+- `.{ .fixed = width }`: Centre as if content is `width` wide (uniform alignment across blocks)
+- If `target_width <= content_width`: return at natural width (no centring)
 
 * Examples
 
-** Single-Phase (Recommended)
+** Auto Centring (Simple)
 #+begin_src zig
-const centred = try header.toBlockCentred(allocator, 80);
+const centred = try Block.initCentred(allocator, &text_lines, .auto, 80);
 defer centred.deinit(allocator);
 #+end_src
 
-** Two-Phase (When Needed)
+** Uniform Alignment (Multiple Blocks)
 #+begin_src zig
-const block = try header.toBlock(allocator, 60);
-defer block.deinit(allocator);
+const align_width: MinWidth = .{ .fixed = 70 };
 
-const centred = try block.centre(allocator, 80);
-defer centred.deinit(allocator);
+const doc = try Block.initCentred(allocator, &doc_lines, align_width, term_width);
+defer doc.deinit(allocator);
+
+const footer = try Block.initCentred(allocator, &footer_lines, align_width, term_width);
+defer footer.deinit(allocator);
+
+// Both blocks aligned to same left position
+// Can render with different animations
+try render.staggeredFadeIn(stdout, allocator, doc, .{});
+try render.instant(stdout, footer);
 #+end_src
 
 * Design Details
 
-** When to Use Each Approach
+** When to Use Each MinWidth Option
 
-| Pattern       | Use When                                          |
-|---------------+---------------------------------------------------|
-| Single-phase  | Alignment known at creation time (most cases)     |
-| Two-phase     | Dynamic alignment decisions at runtime            |
-| Two-phase     | Reusing same content with different alignments    |
+| MinWidth          | Use When                                             |
+|-------------------+------------------------------------------------------|
+| `.auto`           | Single block, simple centring (most cases)           |
+| `.{ .fixed = w }` | Multiple blocks that need uniform left padding       |
 
 ** Memory Management
 
-Single-phase: One block to free
-Two-phase: Both original and transformed blocks must be freed
+Each `initCentred` creates one block to free. No double allocation regardless of MinWidth option.
 
 * Drawbacks
-- More API surface (both convenience and transform methods)
-- Two-phase requires careful memory management
-- Right-align not commonly used outside multi-column scenarios
+- Adds `MinWidth` parameter to `initCentred` (API change from current implementation)
+- User must manually calculate and specify fixed width for uniform alignment
+- Slightly more verbose for the uniform alignment use case
 
 * Implementation History
 - 2025-12-15: Document created with single-phase and two-phase approaches
 - 2025-12-15: Moved to ready state after design review
 - 2025-12-15: Updated to use British English spelling throughout
+- 2025-12-17: Revised to add MinWidth union for uniform alignment use case
+- 2025-12-17: Removed comptime generic approach (blocks remain separate for independent rendering)
+- 2025-12-17: Changed state to work-in-progress for MinWidth implementation
 
 * References
 - [[file:block-based-rendering.org][Block-Based Architecture]]
