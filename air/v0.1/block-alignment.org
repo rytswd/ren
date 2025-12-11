@@ -1,0 +1,193 @@
+#+title: Block Horizontal Alignment
+#+state: ready
+#+FILETAGS: :layout:alignment:block:
+
+* Summary
+Add horizontal alignment support for positioning blocks within available terminal width. Provide two approaches: **single-phase** with `toBlockCentred()` (recommended) and **two-phase** with separate alignment transforms (for flexibility).
+
+* Motivation
+The overview demo needs to centre blocks within the terminal. Currently, all blocks are positioned at column 0 with no control over horizontal placement.
+
+**Key distinction**: This is about positioning the block container, not aligning text inside it.
+
+Example - centred block in 80-column terminal:
+#+begin_example
+          ⚝ ───────────────────────────── [ ren ]
+                       ren (練)
+          ─────────────────────────────────────────
+#+end_example
+
+The entire header block is centred (equal space on left and right). The text inside the header is already centred by the header component itself.
+
+** Goals
+- Two patterns: single-phase (primary) and two-phase (secondary)
+- Position blocks horizontally (centre primarily, right for multi-item layouts)
+- Keep alignment separate from content semantics
+- Work with all block types
+
+** Non-Goals
+- Text alignment within content (content layer responsibility)
+- Vertical positioning
+- Multi-column layouts (separate future feature)
+
+* Proposal
+
+** Two Approaches
+
+*** Approach 1: Single-Phase (Recommended)
+Create and position in one step - simpler code, single allocation:
+
+#+begin_src zig
+const centred = try header.toBlockCentred(allocator, term_width);
+defer centred.deinit(allocator);
+#+end_src
+
+*** Approach 2: Two-Phase (For Flexibility)
+Create then transform - allows dynamic positioning decisions:
+
+#+begin_src zig
+const block = try header.toBlock(allocator, 60);
+defer block.deinit(allocator);
+
+const centred = try block.centre(allocator, term_width);
+defer centred.deinit(allocator);
+#+end_src
+
+** Developer Use Cases
+
+*** Use Case 1: Centre everything (single-phase - recommended)
+#+begin_src zig
+pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
+    const term_width = ren.terminal.detectWidth() orelse 80;
+
+    // Title
+    const title = ren.header.StarterHeader.init("ren (練)", "v0.1.0", config);
+    const title_block = try title.toBlockCentred(allocator, term_width);
+    defer title_block.deinit(allocator);
+
+    try ren.render.fadeIn(stdout, allocator, title_block, .{});
+
+    // Documentation
+    const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, term_width);
+    defer doc_block.deinit(allocator);
+
+    try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{});
+}
+#+end_src
+
+*** Use Case 2: Dynamic alignment decision (two-phase)
+#+begin_src zig
+const block = try content.toBlock(allocator, 60);
+defer block.deinit(allocator);
+
+const positioned = if (should_centre)
+    try block.centre(allocator, term_width)
+else
+    try block.duplicate(allocator);
+defer positioned.deinit(allocator);
+#+end_src
+
+*** Use Case 3: Reuse same content with different alignments (two-phase)
+#+begin_src zig
+const original = try header.toBlock(allocator, 60);
+defer original.deinit(allocator);
+
+const centred = try original.centre(allocator, term_width);
+defer centred.deinit(allocator);
+try ren.render.instant(stdout, centred);
+
+const right = try original.alignRight(allocator, term_width);
+defer right.deinit(allocator);
+try ren.render.instant(stdout, right);
+#+end_src
+
+** API Overview
+
+*** Single-Phase API
+Add centred variants to content types:
+
+#+begin_src zig
+// block.zig
+pub fn init(allocator: Allocator, text_lines: []const []const u8) !Block
+pub fn initCentred(allocator: Allocator, text_lines: []const []const u8, target_width: usize) !Block
+
+// header.zig - ProgressHeader and StarterHeader
+pub fn toBlock(self: Self, allocator: Allocator, width: usize) !Block
+pub fn toBlockCentred(self: Self, allocator: Allocator, target_width: usize) !Block
+#+end_src
+
+*** Two-Phase API
+Add alignment transforms to Block:
+
+#+begin_src zig
+// block.zig
+pub fn centre(self: Block, allocator: Allocator, target_width: usize) !Block
+pub fn alignRight(self: Block, allocator: Allocator, target_width: usize) !Block
+pub fn duplicate(self: Block, allocator: Allocator) !Block
+#+end_src
+
+*** US Spelling Aliases
+Provide aliases for common US spelling:
+
+#+begin_src zig
+// British spelling (primary)
+pub fn centre(self: Block, allocator: Allocator, target_width: usize) !Block
+pub fn initCentred(...) !Block
+pub fn toBlockCentred(...) !Block
+
+// US spelling (aliases)
+pub const center = centre;
+pub const initCentered = initCentred;
+pub const toBlockCentered = toBlockCentred;
+#+end_src
+
+** Behaviour
+
+All alignment operations:
+- If `target_width > block.width`: add padding to position
+- If `target_width <= block.width`: return at natural width (no centring)
+
+* Examples
+
+** Single-Phase (Recommended)
+#+begin_src zig
+const centred = try header.toBlockCentred(allocator, 80);
+defer centred.deinit(allocator);
+#+end_src
+
+** Two-Phase (When Needed)
+#+begin_src zig
+const block = try header.toBlock(allocator, 60);
+defer block.deinit(allocator);
+
+const centred = try block.centre(allocator, 80);
+defer centred.deinit(allocator);
+#+end_src
+
+* Design Details
+
+** When to Use Each Approach
+
+| Pattern       | Use When                                          |
+|---------------+---------------------------------------------------|
+| Single-phase  | Alignment known at creation time (most cases)     |
+| Two-phase     | Dynamic alignment decisions at runtime            |
+| Two-phase     | Reusing same content with different alignments    |
+
+** Memory Management
+
+Single-phase: One block to free
+Two-phase: Both original and transformed blocks must be freed
+
+* Drawbacks
+- More API surface (both convenience and transform methods)
+- Two-phase requires careful memory management
+- Right-align not commonly used outside multi-column scenarios
+
+* Implementation History
+- 2025-12-15: Document created with single-phase and two-phase approaches
+- 2025-12-15: Moved to ready state after design review
+- 2025-12-15: Updated to use British English spelling throughout
+
+* References
+- [[file:block-based-rendering.org][Block-Based Architecture]]
