@@ -34,7 +34,7 @@ pub fn fadeIn(
     defer cleanupAnimation(writer);
 
     // Default colour for plain text content
-    const default_text = colour.Colour{ .r = 200, .g = 200, .b = 200 };
+    const default_text = colour.Colour{ .r = 255, .g = 255, .b = 255 };
 
     // Reveal progressively with opacity
     for (0..config.steps) |step| {
@@ -67,7 +67,7 @@ pub fn staggeredFadeIn(
     defer cleanupAnimation(writer);
 
     // Default colour for plain text content
-    const default_text = colour.Colour{ .r = 200, .g = 200, .b = 200 };
+    const default_text = colour.Colour{ .r = 255, .g = 255, .b = 255 };
 
     // Calculate total animation steps needed
     // Each line needs config.steps to fully fade in
