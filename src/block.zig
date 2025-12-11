@@ -51,6 +51,35 @@ pub const Block = struct {
         }
         allocator.free(self.lines);
     }
+
+    /// For testing:
+    /// Get all lines as a single string with newlines
+    /// No trailing newline after last line
+    /// Caller owns returned memory
+    pub fn toString(self: Block, allocator: std.mem.Allocator) ![]u8 {
+        if (self.lines.len == 0) return try allocator.alloc(u8, 0);
+
+        // Calculate total size needed
+        var total_size: usize = 0;
+        for (self.lines, 0..) |line, i| {
+            total_size += line.content.len;
+            if (i < self.lines.len - 1) total_size += 1; // +1 for newline between lines
+        }
+
+        var result = try allocator.alloc(u8, total_size);
+        var pos: usize = 0;
+
+        for (self.lines, 0..) |line, i| {
+            @memcpy(result[pos .. pos + line.content.len], line.content);
+            pos += line.content.len;
+            if (i < self.lines.len - 1) {
+                result[pos] = '\n';
+                pos += 1;
+            }
+        }
+
+        return result;
+    }
 };
 
 test "Block init from text lines" {
@@ -76,4 +105,23 @@ test "Block with CJK characters" {
     try std.testing.expectEqual(3, block.lines[0].display_width); // "ren" = 3
     try std.testing.expectEqual(2, block.lines[1].display_width); // "練" = 2 (CJK)
     try std.testing.expectEqual(3, block.width); // max width
+}
+
+test "Block toString for testing" {
+    const allocator = std.testing.allocator;
+
+    const text = [_][]const u8{ "Line 1", "Line 2", "Line 3" };
+    const block = try Block.init(allocator, &text);
+    defer block.deinit(allocator);
+
+    const all_lines = try block.toString(allocator);
+    defer allocator.free(all_lines);
+
+    const expected =
+        \\Line 1
+        \\Line 2
+        \\Line 3
+    ;
+
+    try std.testing.expectEqualStrings(expected, all_lines);
 }

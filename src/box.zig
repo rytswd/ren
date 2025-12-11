@@ -205,20 +205,19 @@ test "Box wrap simple block" {
     const wrapped = try box.wrap(allocator, inner, 15);
     defer wrapped.deinit(allocator);
 
-    try std.testing.expectEqual(3, wrapped.height); // +2 for borders
+    try std.testing.expectEqual(3, wrapped.height);
     try std.testing.expectEqual(15, wrapped.width);
 
-    try std.testing.expectEqualStrings(
+    const output = try wrapped.toString(allocator);
+    defer allocator.free(output);
+
+    const expected =
         \\╭─────────────╮
-    , wrapped.lines[0].content);
-
-    try std.testing.expectEqualStrings(
         \\│  Hello      │
-    , wrapped.lines[1].content);
-
-    try std.testing.expectEqualStrings(
         \\╰─────────────╯
-    , wrapped.lines[2].content);
+    ;
+
+    try std.testing.expectEqualStrings(expected, output);
 }
 
 test "Box wrap multi-line block" {
@@ -235,21 +234,18 @@ test "Box wrap multi-line block" {
     try std.testing.expectEqual(5, wrapped.height);
     try std.testing.expectEqual(14, wrapped.width);
 
-    try std.testing.expectEqualStrings(
+    const output = try wrapped.toString(allocator);
+    defer allocator.free(output);
+
+    const expected =
         \\╭────────────╮
-    , wrapped.lines[0].content);
-    try std.testing.expectEqualStrings(
         \\│ Line 1     │
-    , wrapped.lines[1].content);
-    try std.testing.expectEqualStrings(
         \\│ Line 2     │
-    , wrapped.lines[2].content);
-    try std.testing.expectEqualStrings(
         \\│ Line 3     │
-    , wrapped.lines[3].content);
-    try std.testing.expectEqualStrings(
         \\╰────────────╯
-    , wrapped.lines[4].content);
+    ;
+
+    try std.testing.expectEqualStrings(expected, output);
 }
 
 test "Box wrap with margin" {
@@ -266,6 +262,7 @@ test "Box wrap with margin" {
     try std.testing.expectEqual(3, wrapped.height);
     try std.testing.expectEqual(12, wrapped.width);
 
+    // Check lines individually to validate trailing margin spaces
     try std.testing.expectEqualStrings("  ╭──────╮  ", wrapped.lines[0].content);
     try std.testing.expectEqualStrings("  │ Hi   │  ", wrapped.lines[1].content);
     try std.testing.expectEqualStrings("  ╰──────╯  ", wrapped.lines[2].content);

@@ -252,76 +252,7 @@ pub const ProgressHeader = struct {
             .display_width = width,
         };
     }
-
-    /// Render the progress header with colours
-    /// Format: ● ○ ○ ──────────────── [ 1 / 3 ]
-    ///              Title
-    ///         ────────────────────────────────
-    pub fn render(self: ProgressHeader, allocator: std.mem.Allocator, writer: *std.Io.Writer) !void {
-        // Get width: configured > detected > fallback to 60
-        const width = self.config.width orelse terminal.detectWidth() orelse 60;
-
-        // Check if all steps are completed
-        const all_completed = self.current_step >= self.total_steps;
-
-        // First line: render progress dots with colours
-        for (0..self.total_steps) |i| {
-            if (all_completed or i < self.current_step) {
-                try self.config.write_accent(allocator, writer, self.completed_marker);
-            } else if (i == self.current_step) {
-                try self.config.write_primary(allocator, writer, self.current_marker);
-            } else {
-                try self.config.write_subtle(allocator, writer, self.upcoming_marker);
-            }
-            try writer.writeAll(" ");
-        }
-
-        // Render separator
-        const dots_width = self.total_steps * 2;
-        const counter_num = if (self.current_step >= self.total_steps) self.total_steps else self.current_step + 1;
-        const counter = try std.fmt.allocPrint(allocator, "[ {} / {} ]", .{ counter_num, self.total_steps });
-        defer allocator.free(counter);
-        const separator_width = width - dots_width - counter.len - 1;
-
-        const separator_line = try buildSeparatorLine(allocator, self.config.separator_marker, separator_width);
-        defer allocator.free(separator_line);
-        try self.config.write_secondary(allocator, writer, separator_line);
-
-        try writer.writeAll(" ");
-        try self.config.write_secondary(allocator, writer, counter);
-        try writer.writeAll("\n");
-
-        // Second line: title (centred)
-        try renderCentredTitle(writer, self.title, width, self.config.title_padding);
-
-        // Third line: full separator
-        try self.config.renderSeparator(allocator, writer, width, 0, width);
-        try writer.writeAll("\n");
-
-        try writer.flush();
-    }
 };
-
-// Test helper for ProgressHeader
-fn expectProgressRender(
-    current_step: usize,
-    total_steps: usize,
-    title: []const u8,
-    config: Config,
-    expected: []const u8,
-) !void {
-    const allocator = std.testing.allocator;
-    const header = ProgressHeader.init(current_step, total_steps, title, config);
-
-    var output_buffer: [2048]u8 = undefined;
-    var output_writer = std.Io.Writer.fixed(&output_buffer);
-
-    try header.render(allocator, &output_writer);
-
-    const output = output_writer.buffered();
-
-    try std.testing.expectEqualStrings(expected, output);
-}
 
 test "ProgressHeader init" {
     const config = Config{};
@@ -329,60 +260,6 @@ test "ProgressHeader init" {
     try std.testing.expectEqual(0, header.current_step);
     try std.testing.expectEqual(3, header.total_steps);
     try std.testing.expectEqualStrings("Test", header.title);
-}
-
-test "ProgressHeader render - first step" {
-    try expectProgressRender(0, 3, "Initializing", Config{ .use_colour = false },
-        \\◉ ○ ○ ──────────────────────────────────────────── [ 1 / 3 ]
-        \\                        Initializing
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - middle step" {
-    try expectProgressRender(1, 3, "Building", Config{ .use_colour = false },
-        \\● ◉ ○ ──────────────────────────────────────────── [ 2 / 3 ]
-        \\                          Building
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - last step" {
-    try expectProgressRender(2, 3, "Complete", Config{ .use_colour = false },
-        \\● ● ◉ ──────────────────────────────────────────── [ 3 / 3 ]
-        \\                          Complete
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - custom width" {
-    try expectProgressRender(0, 2, "Test", Config{ .use_colour = false, .width = 40 },
-        \\◉ ○ ────────────────────────── [ 1 / 2 ]
-        \\                  Test
-        \\────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - custom width odd" {
-    try expectProgressRender(0, 2, "Odd", Config{ .use_colour = false, .width = 45 },
-        \\◉ ○ ─────────────────────────────── [ 1 / 2 ]
-        \\                     Odd
-        \\─────────────────────────────────────────────
-        \\
-    );
-}
-
-test "ProgressHeader render - all completed" {
-    try expectProgressRender(3, 3, "All Done", Config{ .use_colour = false },
-        \\● ● ● ──────────────────────────────────────────── [ 3 / 3 ]
-        \\                          All Done
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
 }
 
 test "ProgressHeader toBlock - exact match" {
@@ -397,15 +274,15 @@ test "ProgressHeader toBlock - exact match" {
 
     try std.testing.expectEqualStrings(
         \\● ◉ ○ ──────────────────────────────────────────── [ 2 / 3 ]
-        , block.lines[0].content);
+    , block.lines[0].content);
 
     try std.testing.expectEqualStrings(
         \\                          Building
-        , block.lines[1].content);
+    , block.lines[1].content);
 
     try std.testing.expectEqualStrings(
         \\────────────────────────────────────────────────────────────
-        , block.lines[2].content);
+    , block.lines[2].content);
 }
 
 /// Starter header for single operations
@@ -458,13 +335,13 @@ pub const StarterHeader = struct {
                 const col = self.config.palette.get(.primary);
                 const ansi = try col.toAnsi(allocator);
                 defer allocator.free(ansi);
-                try line.appendSlice(allocator,ansi);
-                try line.appendSlice(allocator,self.starter_marker);
-                try line.appendSlice(allocator,colour.reset);
+                try line.appendSlice(allocator, ansi);
+                try line.appendSlice(allocator, self.starter_marker);
+                try line.appendSlice(allocator, colour.reset);
             } else {
-                try line.appendSlice(allocator,self.starter_marker);
+                try line.appendSlice(allocator, self.starter_marker);
             }
-            try line.append(allocator,' ');
+            try line.append(allocator, ' ');
             used_width = unicode.displayWidth(self.starter_marker) + 1;
         }
 
@@ -488,28 +365,28 @@ pub const StarterHeader = struct {
                 const col = gradient.get(t);
                 const ansi = try col.toAnsi(allocator);
                 defer allocator.free(ansi);
-                try line.appendSlice(allocator,ansi);
-                try line.appendSlice(allocator,self.config.separator_marker);
+                try line.appendSlice(allocator, ansi);
+                try line.appendSlice(allocator, self.config.separator_marker);
             }
-            try line.appendSlice(allocator,colour.reset);
+            try line.appendSlice(allocator, colour.reset);
         } else {
             for (0..separator_width) |_| {
-                try line.appendSlice(allocator,self.config.separator_marker);
+                try line.appendSlice(allocator, self.config.separator_marker);
             }
         }
 
         // Context
         if (context_text.len > 0) {
-            try line.append(allocator,' ');
+            try line.append(allocator, ' ');
             if (self.config.use_colour) {
                 const col = self.config.palette.get(.secondary);
                 const ansi = try col.toAnsi(allocator);
                 defer allocator.free(ansi);
-                try line.appendSlice(allocator,ansi);
-                try line.appendSlice(allocator,context_text);
-                try line.appendSlice(allocator,colour.reset);
+                try line.appendSlice(allocator, ansi);
+                try line.appendSlice(allocator, context_text);
+                try line.appendSlice(allocator, colour.reset);
             } else {
-                try line.appendSlice(allocator,context_text);
+                try line.appendSlice(allocator, context_text);
             }
         }
 
@@ -551,13 +428,13 @@ pub const StarterHeader = struct {
                 const col = gradient.get(t);
                 const ansi = try col.toAnsi(allocator);
                 defer allocator.free(ansi);
-                try line.appendSlice(allocator,ansi);
-                try line.appendSlice(allocator,self.config.separator_marker);
+                try line.appendSlice(allocator, ansi);
+                try line.appendSlice(allocator, self.config.separator_marker);
             }
-            try line.appendSlice(allocator,colour.reset);
+            try line.appendSlice(allocator, colour.reset);
         } else {
             for (0..width) |_| {
-                try line.appendSlice(allocator,self.config.separator_marker);
+                try line.appendSlice(allocator, self.config.separator_marker);
             }
         }
 
@@ -565,53 +442,6 @@ pub const StarterHeader = struct {
             .content = try line.toOwnedSlice(allocator),
             .display_width = width,
         };
-    }
-
-    /// Render the starter header
-    /// Format: ⚝ ──────────────── [ context ]
-    ///              Title
-    ///         ────────────────────────────────
-    pub fn render(self: StarterHeader, allocator: std.mem.Allocator, writer: *std.Io.Writer) !void {
-        // Get width: configured > detected > fallback to 60
-        const width = self.config.width orelse terminal.detectWidth() orelse 60;
-
-        // First line: starter marker (if not empty), separator, optional context
-        var used_width: usize = 0;
-
-        if (self.starter_marker.len > 0) {
-            try self.config.write_primary(allocator, writer, self.starter_marker);
-            try writer.writeAll(" ");
-            used_width = unicode.displayWidth(self.starter_marker) + 1; // marker + space
-        }
-
-        const context_text = if (self.context) |ctx|
-            try std.fmt.allocPrint(allocator, "[ {s} ]", .{ctx})
-        else
-            try allocator.dupe(u8, "");
-        defer allocator.free(context_text);
-
-        // Calculate separator width based on whether we have context
-        const separator_width = if (context_text.len > 0)
-            width - used_width - context_text.len - 1 // -1 for space before context
-        else
-            width - used_width; // no space needed when no context
-
-        try self.config.renderSeparator(allocator, writer, separator_width, used_width, width);
-
-        if (context_text.len > 0) {
-            try writer.writeAll(" ");
-            try self.config.write_secondary(allocator, writer, context_text);
-        }
-        try writer.writeAll("\n");
-
-        // Second line: title (centred)
-        try renderCentredTitle(writer, self.title, width, self.config.title_padding);
-
-        // Third line: full separator
-        try self.config.renderSeparator(allocator, writer, width, 0, width);
-        try writer.writeAll("\n");
-
-        try writer.flush();
     }
 };
 
@@ -649,99 +479,6 @@ test "Config renderSeparator two_colour gradient - exact 60 char match" {
     try std.testing.expectEqualStrings(expected, output);
 }
 
-// Helper: build separator line from separator char repeated count times
-fn buildSeparatorLine(allocator: std.mem.Allocator, separator_char: []const u8, count: usize) ![]u8 {
-    const total_len = separator_char.len * count;
-    const line = try allocator.alloc(u8, total_len);
-    var pos: usize = 0;
-    for (0..count) |_| {
-        for (separator_char) |byte| {
-            line[pos] = byte;
-            pos += 1;
-        }
-    }
-    return line;
-}
-
-// Helper: render centred title line
-fn renderCentredTitle(writer: *std.Io.Writer, title: []const u8, width: usize, title_padding: usize) !void {
-    const padding = if (title.len < width)
-        (width - title.len) / 2
-    else
-        title_padding;
-
-    for (0..padding) |_| {
-        try writer.writeAll(" ");
-    }
-    try writer.writeAll(title);
-    try writer.writeAll("\n");
-}
-
-// Test helper for StarterHeader
-fn expectStarterRender(
-    title: []const u8,
-    context: ?[]const u8,
-    config: Config,
-    expected: []const u8,
-) !void {
-    const allocator = std.testing.allocator;
-    const header = StarterHeader.init(title, context, config);
-
-    var output_buffer: [2048]u8 = undefined;
-    var output_writer = std.Io.Writer.fixed(&output_buffer);
-
-    try header.render(allocator, &output_writer);
-
-    const output = output_writer.buffered();
-
-    try std.testing.expectEqualStrings(expected, output);
-}
-
-test "StarterHeader with context" {
-    try expectStarterRender("Configuration", "ren", Config{ .use_colour = false },
-        \\⚝ ────────────────────────────────────────────────── [ ren ]
-        \\                       Configuration
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "StarterHeader without context" {
-    try expectStarterRender("Status", null, Config{ .use_colour = false },
-        \\⚝ ──────────────────────────────────────────────────────────
-        \\                           Status
-        \\────────────────────────────────────────────────────────────
-        \\
-    );
-}
-
-test "StarterHeader with empty starter_marker" {
-    const config = Config{ .use_colour = false };
-    const header = StarterHeader.init("Title", "info", config);
-    const header_with_empty = StarterHeader{
-        .title = header.title,
-        .context = header.context,
-        .config = header.config,
-        .starter_marker = "",
-    };
-
-    var output_buffer: [2048]u8 = undefined;
-    var output_writer = std.Io.Writer.fixed(&output_buffer);
-
-    const allocator = std.testing.allocator;
-    try header_with_empty.render(allocator, &output_writer);
-
-    const output = output_writer.buffered();
-    const expected =
-        \\─────────────────────────────────────────────────── [ info ]
-        \\                           Title
-        \\────────────────────────────────────────────────────────────
-        \\
-    ;
-
-    try std.testing.expectEqualStrings(expected, output);
-}
-
 test "StarterHeader toBlock - exact match" {
     const allocator = std.testing.allocator;
 
@@ -754,18 +491,19 @@ test "StarterHeader toBlock - exact match" {
 
     try std.testing.expectEqualStrings(
         \\⚝ ────────────────────────────────────────────────── [ ren ]
-        , block.lines[0].content);
+    , block.lines[0].content);
 
     try std.testing.expectEqualStrings(
         \\                       Configuration
-        , block.lines[1].content);
+    , block.lines[1].content);
 
     try std.testing.expectEqualStrings(
         \\────────────────────────────────────────────────────────────
-        , block.lines[2].content);
+    , block.lines[2].content);
 }
 
 test "StarterHeader with custom starter_marker" {
+    const allocator = std.testing.allocator;
     const config = Config{ .use_colour = false };
     const header = StarterHeader.init("Custom", null, config);
     const header_with_custom = StarterHeader{
@@ -775,18 +513,16 @@ test "StarterHeader with custom starter_marker" {
         .starter_marker = "❯",
     };
 
-    var output_buffer: [2048]u8 = undefined;
-    var output_writer = std.Io.Writer.fixed(&output_buffer);
+    const block = try header_with_custom.toBlock(allocator, 60);
+    defer block.deinit(allocator);
 
-    const allocator = std.testing.allocator;
-    try header_with_custom.render(allocator, &output_writer);
+    const output = try block.toString(allocator);
+    defer allocator.free(output);
 
-    const output = output_writer.buffered();
     const expected =
         \\❯ ──────────────────────────────────────────────────────────
         \\                           Custom
         \\────────────────────────────────────────────────────────────
-        \\
     ;
 
     try std.testing.expectEqualStrings(expected, output);

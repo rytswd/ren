@@ -6,6 +6,7 @@ const ren = @import("ren");
 const Colour = ren.colour.Colour;
 const header = ren.header;
 const box = ren.box;
+const render = ren.render;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -18,6 +19,9 @@ pub fn main() !void {
 
     try stdout.print("\n", .{});
 
+    // Detect terminal width early
+    const term_width = ren.terminal.detectWidth();
+
     // ///----------------------------------------
     // //  Title StarterHeader with gradient
     // /------------------------------------------
@@ -29,13 +33,15 @@ pub fn main() !void {
         } },
     };
     const title = header.StarterHeader.init("ren (練) Demo", "sophisticated", title_config);
-    try title.render(allocator, stdout);
+    const title_width = term_width orelse 60;
+    var title_block = try title.toBlock(allocator, title_width);
+    try render.render(stdout, title_block);
+    title_block.deinit(allocator);
     try stdout.print("\n", .{});
 
     // ///----------------------------------------
     // //   Show detected width
     // /------------------------------------------
-    const term_width = ren.terminal.detectWidth();
     if (term_width) |w| {
         try stdout.print("  Terminal width: {} columns (auto-detected)\n", .{w});
     } else {
@@ -50,19 +56,27 @@ pub fn main() !void {
     const ren_config = header.Config{};
 
     var demo = header.ProgressHeader.init(0, 3, "Initializing", ren_config);
-    try demo.render(allocator, stdout);
+    var block = try demo.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n", .{});
 
     demo = header.ProgressHeader.init(1, 3, "Building", ren_config);
-    try demo.render(allocator, stdout);
+    block = try demo.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n", .{});
 
     demo = header.ProgressHeader.init(2, 3, "Complete", ren_config);
-    try demo.render(allocator, stdout);
+    block = try demo.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n", .{});
 
     demo = header.ProgressHeader.init(3, 3, "All Finished", ren_config);
-    try demo.render(allocator, stdout);
+    block = try demo.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n\n", .{});
 
     // ///----------------------------------------
@@ -70,7 +84,9 @@ pub fn main() !void {
     // /------------------------------------------
     try stdout.print("  warm palette:\n\n", .{});
     const warm_demo = header.ProgressHeader.init(1, 3, "Warm Earth Tones", header.Config{ .palette = ren.colour.warm });
-    try warm_demo.render(allocator, stdout);
+    block = try warm_demo.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n\n", .{});
 
     // ///----------------------------------------
@@ -78,7 +94,9 @@ pub fn main() !void {
     // /------------------------------------------
     try stdout.print("  cool palette:\n\n", .{});
     const cool_demo = header.ProgressHeader.init(1, 3, "Cool Blues", header.Config{ .palette = ren.colour.cool });
-    try cool_demo.render(allocator, stdout);
+    block = try cool_demo.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n\n", .{});
 
     // ///----------------------------------------
@@ -86,7 +104,9 @@ pub fn main() !void {
     // /------------------------------------------
     try stdout.print("  monochrome palette:\n\n", .{});
     const mono_demo = header.ProgressHeader.init(1, 3, "Greyscale", header.Config{ .palette = ren.colour.monochrome });
-    try mono_demo.render(allocator, stdout);
+    block = try mono_demo.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n\n", .{});
 
     // ///========================================
@@ -95,11 +115,15 @@ pub fn main() !void {
     try stdout.print("  Starter headers:\n\n", .{});
 
     const starter1 = header.StarterHeader.init("Configuration", "ren", header.Config{});
-    try starter1.render(allocator, stdout);
+    block = try starter1.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n", .{});
 
     const starter2 = header.StarterHeader.init("Status", null, header.Config{});
-    try starter2.render(allocator, stdout);
+    block = try starter2.toBlock(allocator, 60);
+    try render.render(stdout, block);
+    block.deinit(allocator);
     try stdout.print("\n\n", .{});
 
     // ///========================================
@@ -163,7 +187,7 @@ pub fn main() !void {
     defer boxed_block.deinit(allocator);
 
     // Render layer: output to terminal
-    try ren.render.render(stdout, boxed_block);
+    try render.render(stdout, boxed_block);
     try stdout.print("\n", .{});
 
     try stdout.flush();
