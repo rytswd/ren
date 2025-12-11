@@ -24,7 +24,7 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     var title_block = try title.toBlock(allocator, width);
     defer title_block.deinit(allocator);
     try ren.render.fadeIn(stdout, allocator, title_block, .{
-        .steps = 20,
+        .steps = 12,
         .step_delay_ns = 100 * std.time.ns_per_ms,
     });
     try stdout.print("\n", .{});
@@ -48,8 +48,8 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const doc_block = try ren.block.Block.init(allocator, &doc_lines);
     defer doc_block.deinit(allocator);
     try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{
-        .steps = 8,
-        .step_delay_ns = 40 * std.time.ns_per_ms,
+        .steps = 12,
+        .step_delay_ns = 80 * std.time.ns_per_ms,
         .line_offset_steps = 1,
     });
     try stdout.print("\n", .{});
@@ -85,7 +85,10 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     };
     const footer_sep = try ren.header.separatorBlock(allocator, width, footer_config);
     defer footer_sep.deinit(allocator);
-    try ren.render.instant(stdout, footer_sep);
+    try ren.render.fadeIn(stdout, allocator, footer_sep, .{
+        .steps = 10,
+        .step_delay_ns = 100 * std.time.ns_per_ms,
+    });
 
     const footer_lines = [_][]const u8{
         "  Developed by @rytswd",
@@ -94,7 +97,11 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     };
     const footer_block = try ren.block.Block.init(allocator, &footer_lines);
     defer footer_block.deinit(allocator);
-    try ren.render.instant(stdout, footer_block);
+    try ren.render.staggeredFadeIn(stdout, allocator, footer_block, .{
+        .steps = 12,
+        .step_delay_ns = 80 * std.time.ns_per_ms,
+        .line_offset_steps = 1,
+    });
     try stdout.print("\n", .{});
 
     try stdout.flush();
