@@ -1,38 +1,23 @@
-//! Render layer - outputs Blocks to terminal
+//! Render layer - flat API for all render effects
 //!
-//! Handles instant rendering and animation effects.
+//! Provides instant rendering and animations.
+//! Implementation details are in render/ subdirectory.
 
-const std = @import("std");
 const Block = @import("block.zig").Block;
 
-/// Render a Block instantly (trims trailing whitespace)
-pub fn render(writer: *std.Io.Writer, block: Block) !void {
-    for (block.lines) |line| {
-        const trimmed = std.mem.trimRight(u8, line.content, " ");
-        try writer.writeAll(trimmed);
-        try writer.writeAll("\n");
-    }
-    try writer.flush();
-}
+// Re-export render effects with flat API
+const instant_impl = @import("render/instant.zig");
+const fade_in_impl = @import("render/fade_in.zig");
 
-test "render outputs block" {
-    const allocator = std.testing.allocator;
+/// Instant render - output Block immediately
+pub const instant = instant_impl.instant;
 
-    const text = [_][]const u8{ "Line 1", "Line 2" };
-    const block = try Block.init(allocator, &text);
-    defer block.deinit(allocator);
+/// Fade-in animation - progressive reveal with alpha blending
+pub const fadeIn = fade_in_impl.fadeIn;
 
-    var output_buffer: [256]u8 = undefined;
-    var output_writer = std.Io.Writer.fixed(&output_buffer);
+/// Fade-in configuration
+pub const FadeInConfig = fade_in_impl.Config;
 
-    try render(&output_writer, block);
-
-    const output = output_writer.buffered();
-    const expected =
-        \\Line 1
-        \\Line 2
-        \\
-    ;
-
-    try std.testing.expectEqualStrings(expected, output);
-}
+// Legacy compatibility (deprecated)
+pub const render = instant;
+pub const FadeConfig = FadeInConfig;

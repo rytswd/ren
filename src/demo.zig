@@ -190,5 +190,25 @@ pub fn main() !void {
     try render.render(stdout, boxed_block);
     try stdout.print("\n", .{});
 
+    // ///========================================
+    // //   Animation demo
+    // /==========================================
+    try stdout.print("  Fade-in animation:\n\n", .{});
+
+    const fade_header = header.StarterHeader.init("Animated Reveal", "fade", header.Config{
+        .separator_gradient = .{ .two_colour = .{
+            .start = Colour.hex("#9DF29D"),
+            .end = Colour.hex("#9D9DF2"),
+        } },
+    });
+    const fade_block = try fade_header.toBlock(allocator, 60);
+    defer fade_block.deinit(allocator);
+
+    try render.fadeIn(stdout, allocator, fade_block, .{
+        .steps = 10,
+        .step_delay_ns = 100 * std.time.ns_per_ms,
+    });
+    try stdout.print("\n", .{});
+
     try stdout.flush();
 }

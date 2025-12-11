@@ -24,11 +24,12 @@ fn parseHexDigit(comptime c: u8) u8 {
     };
 }
 
-/// RGB colour value for truecolor support
+/// RGBA colour value for truecolor support with alpha channel
 pub const Colour = struct {
     r: u8,
     g: u8,
     b: u8,
+    a: u8 = 255, // Alpha: 0 = transparent, 255 = opaque
 
     /// Create colour from hex string at compile time
     /// Accepts "#RRGGBB", "RRGGBB", "#RGB", or "RGB"
@@ -55,8 +56,17 @@ pub const Colour = struct {
     }
 
     /// Convert to ANSI truecolor escape code
+    /// If alpha < 255, blends with background (default: terminal background ~black)
     pub fn toAnsi(self: Colour, allocator: std.mem.Allocator) ![]u8 {
-        return try std.fmt.allocPrint(allocator, "\x1b[38;2;{};{};{}m", .{ self.r, self.g, self.b });
+        if (self.a == 255) {
+            // Fully opaque, use as-is
+            return try std.fmt.allocPrint(allocator, "\x1b[38;2;{};{};{}m", .{ self.r, self.g, self.b });
+        } else {
+            // Blend with background (assume dark terminal)
+            const bg = Colour{ .r = 20, .g = 20, .b = 20, .a = 255 };
+            const blended = self.blend(bg);
+            return try std.fmt.allocPrint(allocator, "\x1b[38;2;{};{};{}m", .{ blended.r, blended.g, blended.b });
+        }
     }
 
     /// Write text with this colour to a writer (includes reset)
@@ -78,16 +88,71 @@ pub const Colour = struct {
         try writer.writeAll(text);
     }
 
+    /// Create a new colour with specified alpha
+    pub fn withAlpha(self: Colour, alpha: u8) Colour {
+        return .{ .r = self.r, .g = self.g, .b = self.b, .a = alpha };
+    }
+
+    /// Blend this colour with background based on alpha channel
+    /// Returns opaque colour (alpha = 255) that looks like transparent overlay
+    pub fn blend(self: Colour, background: Colour) Colour {
+        const alpha_f = @as(f32, @floatFromInt(self.a)) / 255.0;
+        const inv_alpha = 1.0 - alpha_f;
+
+        return .{
+            .r = @intFromFloat(@as(f32, @floatFromInt(self.r)) * alpha_f + @as(f32, @floatFromInt(background.r)) * inv_alpha),
+            .g = @intFromFloat(@as(f32, @floatFromInt(self.g)) * alpha_f + @as(f32, @floatFromInt(background.g)) * inv_alpha),
+            .b = @intFromFloat(@as(f32, @floatFromInt(self.b)) * alpha_f + @as(f32, @floatFromInt(background.b)) * inv_alpha),
+            .a = 255,
+        };
+    }
+
     // TODO: Add fallback conversion methods for terminal compatibility
     // pub fn to256Colour(self: Colour) u8 { }
     // pub fn to16Colour(self: Colour) u8 { }
 };
+
+test "Colour with alpha channel" {
+    const c = Colour{ .r = 255, .g = 128, .b = 64, .a = 128 };
+    try std.testing.expectEqual(128, c.a);
+
+    const full_opacity = c.withAlpha(255);
+    try std.testing.expectEqual(255, full_opacity.a);
+    try std.testing.expectEqual(255, full_opacity.r); // RGB unchanged
+}
+
+test "Colour blend with background" {
+    const fg = Colour{ .r = 200, .g = 100, .b = 50, .a = 128 }; // 50% transparent
+    const bg = Colour{ .r = 0, .g = 0, .b = 0, .a = 255 }; // black background
+
+    const blended = fg.blend(bg);
+
+    // 50% blend: (200*0.5 + 0*0.5) = 100
+    try std.testing.expectEqual(100, blended.r);
+    try std.testing.expectEqual(50, blended.g);
+    try std.testing.expectEqual(25, blended.b);
+    try std.testing.expectEqual(255, blended.a); // Result is opaque
+}
+
+test "Colour toAnsi with alpha blends automatically" {
+    const allocator = std.testing.allocator;
+
+    // Transparent colour
+    const transparent = Colour{ .r = 200, .g = 200, .b = 200, .a = 128 };
+    const ansi = try transparent.toAnsi(allocator);
+    defer allocator.free(ansi);
+
+    // Should contain blended RGB values (not original 200,200,200)
+    try std.testing.expect(std.mem.indexOf(u8, ansi, "200;200;200") == null);
+    try std.testing.expect(std.mem.startsWith(u8, ansi, "\x1b[38;2;"));
+}
 
 test "Colour hex parsing - 6 digit" {
     const c1 = Colour.hex("#FF8040");
     try std.testing.expectEqual(255, c1.r);
     try std.testing.expectEqual(128, c1.g);
     try std.testing.expectEqual(64, c1.b);
+    try std.testing.expectEqual(255, c1.a); // Default opaque
 
     const c2 = Colour.hex("A0B0C0");
     try std.testing.expectEqual(160, c2.r);
