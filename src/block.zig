@@ -44,6 +44,61 @@ pub const Block = struct {
         };
     }
 
+    /// Create a Block from text lines, centred within target width
+    /// Single-phase allocation - creates and positions in one step
+    pub fn initCentred(allocator: std.mem.Allocator, text_lines: []const []const u8, target_width: usize) !Block {
+        // First calculate natural content width
+        var content_width: usize = 0;
+        for (text_lines) |text| {
+            const display_width = unicode.displayWidth(text);
+            if (display_width > content_width) {
+                content_width = display_width;
+            }
+        }
+
+        // If target width is not greater than content, just use regular init
+        if (target_width <= content_width) {
+            return init(allocator, text_lines);
+        }
+
+        // Calculate centring padding
+        const available_space = target_width - content_width;
+        const left_pad = available_space / 2;
+
+        // Create lines with padding
+        var lines = try allocator.alloc(Line, text_lines.len);
+        errdefer allocator.free(lines);
+
+        // Create padding string once
+        const padding = try allocator.alloc(u8, left_pad);
+        defer allocator.free(padding);
+        @memset(padding, ' ');
+
+        for (text_lines, 0..) |text, i| {
+            const display_width = unicode.displayWidth(text);
+
+            // Build padded content
+            const content = try std.fmt.allocPrint(allocator, "{s}{s}", .{
+                padding,
+                text,
+            });
+
+            lines[i] = .{
+                .content = content,
+                .display_width = left_pad + display_width,
+            };
+        }
+
+        return .{
+            .lines = lines,
+            .width = target_width,
+            .height = text_lines.len,
+        };
+    }
+
+    // US spelling alias
+    pub const initCentered = initCentred;
+
     /// Free all memory owned by this Block
     pub fn deinit(self: Block, allocator: std.mem.Allocator) void {
         for (self.lines) |line| {
@@ -124,4 +179,30 @@ test "Block toString for testing" {
     ;
 
     try std.testing.expectEqualStrings(expected, all_lines);
+}
+
+test "Block initCentred" {
+    const allocator = std.testing.allocator;
+
+    const text = [_][]const u8{"Hello"};
+    const block = try Block.initCentred(allocator, &text, 15);
+    defer block.deinit(allocator);
+
+    // "Hello" is 5 chars, centred in 15 = 5 left spaces
+    try std.testing.expectEqual(@as(usize, 15), block.width);
+    try std.testing.expectEqual(@as(usize, 1), block.height);
+    try std.testing.expectEqualStrings("     Hello", block.lines[0].content);
+    try std.testing.expectEqual(@as(usize, 10), block.lines[0].display_width);
+}
+
+test "Block initCentred with overflow" {
+    const allocator = std.testing.allocator;
+
+    const text = [_][]const u8{"Very long text"};
+    const block = try Block.initCentred(allocator, &text, 5);
+    defer block.deinit(allocator);
+
+    // Content wider than target - use content width (no centring)
+    try std.testing.expectEqual(@as(usize, 14), block.width);
+    try std.testing.expectEqualStrings("Very long text", block.lines[0].content);
 }
