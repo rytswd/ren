@@ -8,6 +8,41 @@ const terminal = @import("terminal.zig");
 const unicode = @import("unicode.zig");
 const Block = @import("block.zig").Block;
 
+/// Build a separator line Block (Content layer)
+pub fn separatorBlock(allocator: std.mem.Allocator, width: usize, config: Config) !Block {
+    var line: std.ArrayList(u8) = .empty;
+    errdefer line.deinit(allocator);
+
+    if (config.use_colour and config.separator_gradient != null) {
+        const gradient = config.separator_gradient.?;
+        for (0..width) |i| {
+            const t: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(width));
+            const col = gradient.get(t);
+            const ansi = try col.toAnsi(allocator);
+            defer allocator.free(ansi);
+            try line.appendSlice(allocator, ansi);
+            try line.appendSlice(allocator, config.separator_marker);
+        }
+        try line.appendSlice(allocator, colour.reset);
+    } else {
+        for (0..width) |_| {
+            try line.appendSlice(allocator, config.separator_marker);
+        }
+    }
+
+    var lines = try allocator.alloc(Block.Line, 1);
+    lines[0] = .{
+        .content = try line.toOwnedSlice(allocator),
+        .display_width = width,
+    };
+
+    return .{
+        .lines = lines,
+        .width = width,
+        .height = 1,
+    };
+}
+
 /// Configuration for header appearance
 pub const Config = struct {
     /// Separator marker
