@@ -18,6 +18,10 @@ pub const fadeIn = fade_in_impl.fadeIn;
 /// Fade-in configuration
 pub const FadeInConfig = fade_in_impl.Config;
 
+/// Staggered fade-in animation - lines fade in from top to bottom
+pub const staggeredFadeIn = fade_in_impl.staggeredFadeIn;
+pub const StaggeredFadeInConfig = fade_in_impl.StaggeredConfig;
+
 // Legacy compatibility (deprecated)
 pub const render = instant;
 pub const FadeConfig = FadeInConfig;

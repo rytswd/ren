@@ -11,6 +11,17 @@ pub const Config = struct {
     step_delay_ns: u64 = 30 * std.time.ns_per_ms,
 };
 
+/// Staggered fade-in animation configuration
+pub const StaggeredConfig = struct {
+    /// Number of opacity steps per line (higher = smoother)
+    steps: usize = 10,
+    /// Delay between animation steps
+    step_delay_ns: u64 = 30 * std.time.ns_per_ms,
+    /// Delay offset between lines (stagger amount)
+    /// Higher values create more dramatic stagger effect
+    line_offset_steps: usize = 2,
+};
+
 /// Fade in a Block with increasing opacity
 /// Smoothly reveals content by progressively increasing alpha channel
 pub fn fadeIn(
@@ -19,29 +30,13 @@ pub fn fadeIn(
     block: Block,
     config: Config,
 ) !void {
-    // Hide cursor during animation to prevent flashing
-    try common.hideCursor(writer);
-    try writer.flush();
-    defer {
-        common.showCursor(writer) catch {};
-        writer.flush() catch {};
-    }
-
-    // 1. Reserve space with blank lines. This ensures that the same space would
-    // be used for animation, and thus there is no line jumping while
-    // re-rendering takes place.
-    for (0..block.height) |_| {
-        try writer.writeAll("\n");
-    }
-    try writer.flush();
-
-    // 2. Rewind cursor to start of reserved space
-    try common.cursorUp(writer, block.height);
+    try prepareAnimation(writer, block.height);
+    defer cleanupAnimation(writer);
 
     // Default colour for plain text content
     const default_text = colour.Colour{ .r = 200, .g = 200, .b = 200 };
 
-    // 3. Reveal progressively with opacity
+    // Reveal progressively with opacity
     for (0..config.steps) |step| {
         if (step > 0) {
             try common.cursorUp(writer, block.height);
@@ -51,8 +46,59 @@ pub fn fadeIn(
         const alpha_f = @as(f32, @floatFromInt(step + 1)) / @as(f32, @floatFromInt(config.steps));
         const alpha: u8 = @intFromFloat(alpha_f * 255.0);
 
-        // Render each line with modified alpha
-        for (block.lines) |line| {
+        // Render each line with the same alpha
+        try renderLinesWithAlpha(writer, allocator, block, alpha, default_text);
+
+        if (step < config.steps - 1) {
+            std.posix.nanosleep(0, config.step_delay_ns);
+        }
+    }
+}
+
+/// Staggered fade-in animation
+/// Lines fade in progressively from top to bottom with offset timing
+pub fn staggeredFadeIn(
+    writer: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    block: Block,
+    config: StaggeredConfig,
+) !void {
+    try prepareAnimation(writer, block.height);
+    defer cleanupAnimation(writer);
+
+    // Default colour for plain text content
+    const default_text = colour.Colour{ .r = 200, .g = 200, .b = 200 };
+
+    // Calculate total animation steps needed
+    // Each line needs config.steps to fully fade in
+    // Lines are offset by line_offset_steps from each other
+    const total_steps = config.steps + (block.height - 1) * config.line_offset_steps;
+
+    // Animate with staggered fade-in
+    for (0..total_steps) |global_step| {
+        if (global_step > 0) {
+            try common.cursorUp(writer, block.height);
+        }
+
+        // Render each line with appropriate alpha based on its offset
+        for (block.lines, 0..) |line, line_idx| {
+            // Calculate which step this line is at
+            const line_start_step = line_idx * config.line_offset_steps;
+
+            var alpha: u8 = 0;
+            if (global_step >= line_start_step) {
+                const line_step = global_step - line_start_step;
+                if (line_step < config.steps) {
+                    // Still fading in
+                    const alpha_f = @as(f32, @floatFromInt(line_step + 1)) / @as(f32, @floatFromInt(config.steps));
+                    alpha = @intFromFloat(alpha_f * 255.0);
+                } else {
+                    // Fully faded in
+                    alpha = 255;
+                }
+            }
+            // else: not started yet, alpha = 0 (invisible)
+
             const faded = try applyAlpha(allocator, line.content, alpha, default_text);
             defer allocator.free(faded);
 
@@ -62,10 +108,53 @@ pub fn fadeIn(
         }
         try writer.flush();
 
-        if (step < config.steps - 1) {
+        if (global_step < total_steps - 1) {
             std.posix.nanosleep(0, config.step_delay_ns);
         }
     }
+}
+
+/// Prepare the terminal for animation
+/// Hides cursor and reserves space for the block
+fn prepareAnimation(writer: *std.Io.Writer, height: usize) !void {
+    // Hide cursor during animation to prevent flashing
+    try common.hideCursor(writer);
+    try writer.flush();
+
+    // Reserve space with blank lines
+    for (0..height) |_| {
+        try writer.writeAll("\n");
+    }
+    try writer.flush();
+
+    // Rewind cursor to start of reserved space
+    try common.cursorUp(writer, height);
+}
+
+/// Cleanup after animation
+/// Shows cursor again
+fn cleanupAnimation(writer: *std.Io.Writer) void {
+    common.showCursor(writer) catch {};
+    writer.flush() catch {};
+}
+
+/// Render all lines in a block with the same alpha value
+fn renderLinesWithAlpha(
+    writer: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    block: Block,
+    alpha: u8,
+    default_text: colour.Colour,
+) !void {
+    for (block.lines) |line| {
+        const faded = try applyAlpha(allocator, line.content, alpha, default_text);
+        defer allocator.free(faded);
+
+        const trimmed = std.mem.trimRight(u8, faded, " ");
+        try writer.writeAll(trimmed);
+        try writer.writeAll("\n");
+    }
+    try writer.flush();
 }
 
 /// Apply alpha to all ANSI colour codes and plain text in a line
