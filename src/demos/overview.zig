@@ -113,6 +113,7 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     defer allocator.free(footer_line3);
 
     const footer_lines = [_][]const u8{
+        "  ",
         "  Developed by @rytswd",
         "  ",
         footer_line3,
