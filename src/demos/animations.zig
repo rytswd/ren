@@ -4,7 +4,7 @@ const std = @import("std");
 const ren = @import("ren");
 const Colour = ren.colour.Colour;
 
-pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
+pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer, is_tty: bool) !void {
     try stdout.print("\n", .{});
 
     const term_width = ren.terminal.detectWidth();
@@ -24,10 +24,13 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const fade_block = try fade_header.toBlock(allocator, 60);
     defer fade_block.deinit(allocator);
 
-    try ren.render.fadeIn(stdout, allocator, fade_block, .{
-        .steps = 10,
-        .step_delay_ns = 100 * std.time.ns_per_ms,
-    });
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, fade_block),
+        true => try ren.render.fadeIn(allocator, stdout, fade_block, .{
+            .steps = 10,
+            .step_delay_ns = 100 * std.time.ns_per_ms,
+        }),
+    }
     try stdout.print("\n", .{});
 
     // ///========================================
@@ -45,11 +48,14 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const staggered_block = try ren.block.Block.init(allocator, &staggered_lines);
     defer staggered_block.deinit(allocator);
 
-    try ren.render.staggeredFadeIn(stdout, allocator, staggered_block, .{
-        .steps = 10,
-        .step_delay_ns = 50 * std.time.ns_per_ms,
-        .line_offset_steps = 2,
-    });
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, staggered_block),
+        true => try ren.render.staggeredFadeIn(allocator, stdout, staggered_block, .{
+            .steps = 10,
+            .step_delay_ns = 50 * std.time.ns_per_ms,
+            .line_offset_steps = 2,
+        }),
+    }
     try stdout.print("\n", .{});
 
     // ///----------------------------------------
@@ -59,10 +65,14 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const rainbow_config = ren.header.Config{ .separator_gradient = .rainbow };
     const fade_rainbow_sep = try ren.header.separatorBlock(allocator, width, rainbow_config);
     defer fade_rainbow_sep.deinit(allocator);
-    try ren.render.fadeIn(stdout, allocator, fade_rainbow_sep, .{
-        .steps = 10,
-        .step_delay_ns = 100 * std.time.ns_per_ms,
-    });
+
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, fade_rainbow_sep),
+        true => try ren.render.fadeIn(allocator, stdout, fade_rainbow_sep, .{
+            .steps = 10,
+            .step_delay_ns = 100 * std.time.ns_per_ms,
+        }),
+    }
     try stdout.print("\n", .{});
 
     // ///----------------------------------------
@@ -77,14 +87,17 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const fast_block = try ren.block.Block.init(allocator, &fast_lines);
     defer fast_block.deinit(allocator);
 
-    try ren.render.staggeredFadeIn(stdout, allocator, fast_block, .{
-        .steps = 8,
-        .step_delay_ns = 40 * std.time.ns_per_ms,
-        .line_offset_steps = 1,
-    });
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, fast_block),
+        true => try ren.render.staggeredFadeIn(allocator, stdout, fast_block, .{
+            .steps = 8,
+            .step_delay_ns = 40 * std.time.ns_per_ms,
+            .line_offset_steps = 1,
+        }),
+    }
     try stdout.print("\n", .{});
 
-    try stdout.print("  Slow stagger (line_offset_steps = 4):\n", .{});
+    try stdout.print("  Slow stagger (line_offset_steps = 20):\n", .{});
     const slow_lines = [_][]const u8{
         "  Longer delay",
         "  between lines",
@@ -93,11 +106,14 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const slow_block = try ren.block.Block.init(allocator, &slow_lines);
     defer slow_block.deinit(allocator);
 
-    try ren.render.staggeredFadeIn(stdout, allocator, slow_block, .{
-        .steps = 8,
-        .step_delay_ns = 40 * std.time.ns_per_ms,
-        .line_offset_steps = 4,
-    });
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, slow_block),
+        true => try ren.render.staggeredFadeIn(allocator, stdout, slow_block, .{
+            .steps = 8,
+            .step_delay_ns = 40 * std.time.ns_per_ms,
+            .line_offset_steps = 20,
+        }),
+    }
     try stdout.print("\n\n", .{});
 
     try stdout.flush();

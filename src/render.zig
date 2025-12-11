@@ -8,6 +8,7 @@ const Block = @import("block.zig").Block;
 // Re-export render effects with flat API
 const instant_impl = @import("render/instant.zig");
 const fade_in_impl = @import("render/fade_in.zig");
+const common_impl = @import("render/common.zig");
 
 /// Instant render - output Block immediately
 pub const instant = instant_impl.instant;
@@ -21,6 +22,10 @@ pub const FadeInConfig = fade_in_impl.Config;
 /// Staggered fade-in animation - lines fade in from top to bottom
 pub const staggeredFadeIn = fade_in_impl.staggeredFadeIn;
 pub const StaggeredFadeInConfig = fade_in_impl.StaggeredConfig;
+
+/// Cursor control utilities
+pub const hideCursor = common_impl.hideCursor;
+pub const showCursor = common_impl.showCursor;
 
 // Legacy compatibility (deprecated)
 pub const render = instant;

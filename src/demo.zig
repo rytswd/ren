@@ -49,8 +49,10 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     var stdout_buffer: [4096]u8 = undefined;
-    var stdout_writer: std.fs.File.Writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_file = std.fs.File.stdout();
+    var stdout_writer: std.fs.File.Writer = stdout_file.writer(&stdout_buffer);
     const stdout: *std.Io.Writer = &stdout_writer.interface;
+    const is_tty = stdout_file.isTty();
 
     // Parse command line arguments
     var args = try std.process.argsWithAllocator(allocator);
@@ -92,9 +94,9 @@ pub fn main() !void {
 
     // Run the selected demo
     switch (demo_type) {
-        .overview => try overview.run(allocator, stdout),
+        .overview => try overview.run(allocator, stdout, is_tty),
         .headers => try headers.run(allocator, stdout),
         .palettes => try palettes.run(allocator, stdout),
-        .animations => try animations.run(allocator, stdout),
+        .animations => try animations.run(allocator, stdout, is_tty),
     }
 }

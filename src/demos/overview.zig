@@ -4,7 +4,7 @@ const std = @import("std");
 const ren = @import("ren");
 const Colour = ren.colour.Colour;
 
-pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
+pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer, is_tty: bool) !void {
     try stdout.print("\n", .{});
 
     const term_width = ren.terminal.detectWidth();
@@ -23,10 +23,18 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const title = ren.header.StarterHeader.init("ren (練)", "v0.1.0", title_config);
     var title_block = try title.toBlock(allocator, width);
     defer title_block.deinit(allocator);
-    try ren.render.fadeIn(stdout, allocator, title_block, .{
-        .steps = 12,
-        .step_delay_ns = 100 * std.time.ns_per_ms,
-    });
+
+    // If is_tty, use instant rather than fade in.
+    // Note that this uses match expression rather than if else, as there could
+    // be extra flags I will be handling to support forced instant, and other
+    // rendering logic.
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, title_block),
+        true => try ren.render.fadeIn(allocator, stdout, title_block, .{
+            .steps = 12,
+            .step_delay_ns = 100 * std.time.ns_per_ms,
+        }),
+    }
     try stdout.print("\n", .{});
 
     // ///----------------------------------------
@@ -50,11 +58,19 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     };
     const doc_block = try ren.block.Block.initCentred(allocator, &doc_lines, align_width, width);
     defer doc_block.deinit(allocator);
-    try ren.render.staggeredFadeIn(stdout, allocator, doc_block, .{
-        .steps = 12,
-        .step_delay_ns = 80 * std.time.ns_per_ms,
-        .line_offset_steps = 1,
-    });
+
+    // If is_tty, use instant rather than fade in.
+    // Note that this uses match expression rather than if else, as there could
+    // be extra flags I will be handling to support forced instant, and other
+    // rendering logic.
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, doc_block),
+        true => try ren.render.staggeredFadeIn(allocator, stdout, doc_block, .{
+            .steps = 12,
+            .step_delay_ns = 80 * std.time.ns_per_ms,
+            .line_offset_steps = 1,
+        }),
+    }
     try stdout.print("\n", .{});
 
     // // ///----------------------------------------
@@ -98,10 +114,17 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     const footer_sep = try ren.block.Block.initCentred(allocator, &sep_lines, align_width, width);
     defer footer_sep.deinit(allocator);
 
-    try ren.render.fadeIn(stdout, allocator, footer_sep, .{
-        .steps = 10,
-        .step_delay_ns = 100 * std.time.ns_per_ms,
-    });
+    // If is_tty, use instant rather than fade in.
+    // Note that this uses match expression rather than if else, as there could
+    // be extra flags I will be handling to support forced instant, and other
+    // rendering logic.
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, footer_sep),
+        true => try ren.render.fadeIn(allocator, stdout, footer_sep, .{
+            .steps = 10,
+            .step_delay_ns = 100 * std.time.ns_per_ms,
+        }),
+    }
 
     // Build footer with coloured command text
     const cmd_colour = Colour.hex("#70B0F0"); // Blue for commands
@@ -123,12 +146,24 @@ pub fn run(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
     };
     const footer_block = try ren.block.Block.initCentred(allocator, &footer_lines, align_width, width);
     defer footer_block.deinit(allocator);
-    try ren.render.staggeredFadeIn(stdout, allocator, footer_block, .{
-        .steps = 12,
-        .step_delay_ns = 80 * std.time.ns_per_ms,
-        .line_offset_steps = 1,
-    });
+
+    // If is_tty, use instant rather than fade in.
+    // Note that this uses match expression rather than if else, as there could
+    // be extra flags I will be handling to support forced instant, and other
+    // rendering logic.
+    switch (is_tty) {
+        false => try ren.render.instant(stdout, footer_block),
+        true => try ren.render.staggeredFadeIn(allocator, stdout, footer_block, .{
+            .steps = 12,
+            .step_delay_ns = 80 * std.time.ns_per_ms,
+            .line_offset_steps = 1,
+        }),
+    }
     try stdout.print("\n", .{});
 
+    // Show cursor at end of demo (animations hide it but don't show it)
+    if (is_tty) {
+        try ren.render.showCursor(stdout);
+    }
     try stdout.flush();
 }
