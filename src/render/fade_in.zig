@@ -25,8 +25,8 @@ pub const StaggeredConfig = struct {
 /// Fade in a Block with increasing opacity
 /// Smoothly reveals content by progressively increasing alpha channel
 pub fn fadeIn(
-    writer: *std.Io.Writer,
     allocator: std.mem.Allocator,
+    writer: *std.Io.Writer,
     block: Block,
     config: Config,
 ) !void {
@@ -58,8 +58,8 @@ pub fn fadeIn(
 /// Staggered fade-in animation
 /// Lines fade in progressively from top to bottom with offset timing
 pub fn staggeredFadeIn(
-    writer: *std.Io.Writer,
     allocator: std.mem.Allocator,
+    writer: *std.Io.Writer,
     block: Block,
     config: StaggeredConfig,
 ) !void {
